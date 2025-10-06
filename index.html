@@ -63,15 +63,15 @@
 </head>
 <body class="min-h-screen">
 
-    <div id="app" class="flex flex-col min-h-screen">
-        <!-- Başlangıçta yükleniyor ekranı -->
-        <div id="loading-screen" class="fixed inset-0 flex items-center justify-center bg-gray-50 z-50">
-            <div class="flex flex-col items-center p-6 bg-white rounded-xl shadow-lg">
-                <div class="spinner !border-primary !border-t-gray-300 !w-8 !h-8 mb-4"></div>
-                <p class="text-gray-600">Uygulama başlatılıyor...</p>
-            </div>
+    <!-- Loading Screen #app'in dışına taşındı, böylece renderApp() tarafından silinmeyecek. -->
+    <div id="loading-screen" class="fixed inset-0 flex items-center justify-center bg-gray-50 z-50">
+        <div class="flex flex-col items-center p-6 bg-white rounded-xl shadow-lg">
+            <div class="spinner !border-primary !border-t-gray-300 !w-8 !h-8 mb-4"></div>
+            <p class="text-gray-600">Uygulama başlatılıyor...</p>
         </div>
-        
+    </div>
+    
+    <div id="app" class="flex flex-col min-h-screen">
         <!-- Ana İçerik Buraya Yüklenecek -->
     </div>
 
@@ -155,8 +155,6 @@
                 auth = getAuth(app);
 
                 // Hata çözümü: Sadece özel token varsa oturum açmayı dene.
-                // Token yoksa, 'auth/admin-restricted-operation' hatasından kaçınmak için
-                // signInAnonymously çağrısını atlıyoruz. onAuthStateChanged, kullanıcının null olduğunu görecektir.
                 if (initialAuthToken) {
                     await signInWithCustomToken(auth, initialAuthToken);
                     console.log("Özel kimlik doğrulama tokeni ile giriş yapıldı.");
@@ -174,9 +172,11 @@
                         await fetchUserProfile(userId);
                     } else {
                         // Çıkış yapıldığında veya kimlik doğrulaması yoksa burası çalışır.
+                        userRole = 'anonymous'; // Rolü hemen anonim olarak ayarla
                         console.log("Kullanıcı çıkış yaptı veya anonim kullanıcı yok. Giriş ekranına yönlendiriliyor.");
                     }
                     
+                    // Auth kontrolü tamamlandığında yükleme ekranını gizle
                     document.getElementById('loading-screen').classList.add('hidden');
                     renderApp();
                 });
@@ -275,17 +275,9 @@
 
         const renderApp = () => {
             const appElement = document.getElementById('app');
+            // #app elementini temizle. #loading-screen artık #app'in dışında olduğu için güvenli.
             appElement.innerHTML = '';
             
-            if (!userId && userRole === null) {
-                // Auth sürecinin tamamlanmasını bekler.
-                if (document.getElementById('loading-screen').classList.contains('hidden')) {
-                     // Loading ekranı kalktıysa devam et
-                } else {
-                    return;
-                }
-            }
-
             // Başlık ve Navigasyon Barını Ekle
             const headerHtml = renderHeader();
             appElement.insertAdjacentHTML('afterbegin', headerHtml);
@@ -707,15 +699,14 @@
             btn.disabled = true;
 
             try {
-                // Anonim giriş ile bir UID almayı dene (auth/admin-restricted-operation hatasını almamak için dikkatli ol)
+                // Anonim giriş ile bir UID almayı dene
                 let tempUser = auth.currentUser;
                 if (!tempUser || tempUser.isAnonymous) {
                      try {
-                        // Eğer token ile giriş yapılmadıysa ve anonim kullanıcı yoksa, zorunlu olarak bir kez denemek gerekiyor.
                         const anonCred = await signInAnonymously(auth);
                         tempUser = anonCred.user;
                      } catch(e) {
-                         // Eğer burası tekrar 'auth/admin-restricted-operation' hatası verirse, kullanıcıyı kayıt edemeyiz.
+                         // Eğer burası tekrar 'auth/admin-restricted-operation' hatası verirse, kullanıcıya bilgi ver.
                          if (e.code === 'auth/admin-restricted-operation') {
                              throw new Error("Sistem kısıtlı bir ortamda çalışıyor. Lütfen doğrudan bir doktor hesabıyla giriş yapmayı deneyin.");
                          }
@@ -737,8 +728,10 @@
                 }, { merge: true }); 
 
                 showNotification("Kayıt başarılı! Hasta Paneline yönlendiriliyorsunuz.", "success");
+                // onAuthStateChanged tetiklenecek ve yeni kullanıcıyı işleyecek
+                // Ancak hızlı yönlendirme için manuel profil güncelleme yapıyoruz:
                 await fetchUserProfile(tempUser.uid); 
-                navigate('patient-panel');
+                renderApp();
 
             } catch (error) {
                 console.error("Hasta kayıt hatası:", error);
@@ -822,9 +815,17 @@
             } else {
                 // Kapanıyor
                 container.classList.add('hidden');
-                if (form) form.removeEventListener('submit', handleNewAppointment);
+                // Form submit event listener'ını kaldırmaya gerek yok, form zaten tekrar render edilecek
             }
         };
+        
+        // Yeni randevu submit eventi
+        document.addEventListener('submit', (e) => {
+            if (e.target.id === 'new-appointment-form') {
+                handleNewAppointment(e);
+            }
+        });
+
 
         const handleNewAppointment = async (e) => {
             e.preventDefault();
