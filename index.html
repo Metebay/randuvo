@@ -77,10 +77,11 @@
 
     <!-- Firebase SDK'ları -->
     <script type="module">
+        // ÖNEMLİ: SDK Versiyonu 11.6.1'e geri alındı ve tüm gerekli fonksiyonlar import edildi.
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { 
             getAuth, 
-            signInAnonymously, // Bu artık nadiren kullanılacak
+            signInAnonymously, 
             signInWithCustomToken, 
             onAuthStateChanged,
             signInWithEmailAndPassword,
@@ -161,8 +162,6 @@
                     console.log("Özel kimlik doğrulama tokeni ile giriş yapıldı.");
                 } else {
                     console.warn("Özel kimlik doğrulama tokeni (initialAuthToken) bulunamadı. Anonim giriş denemesi atlandı. Kullanıcı girişi gerekecek.");
-                    // Opsiyonel: Anonim giriş denemesini try/catch içine alarak hatayı yoksayabiliriz.
-                    // await signInAnonymously(auth); 
                 }
 
                 // Auth durumu değiştiğinde çalışır (giriş, çıkış, token kullanımı sonrası)
@@ -174,8 +173,7 @@
                     if (userId) {
                         await fetchUserProfile(userId);
                     } else {
-                        // Hata çözümü: Çıkış yapıldığında tekrar signInAnonymously çağırmayı durdurduk.
-                        // Bu, 'auth/admin-restricted-operation' hatasını tekrar tetiklemeyi önler.
+                        // Çıkış yapıldığında veya kimlik doğrulaması yoksa burası çalışır.
                         console.log("Kullanıcı çıkış yaptı veya anonim kullanıcı yok. Giriş ekranına yönlendiriliyor.");
                     }
                     
@@ -188,7 +186,7 @@
                     <div class="text-center p-6 bg-white rounded-xl shadow-lg">
                         <p class="text-red-600 font-bold">Uygulama Hatası</p>
                         <p class="text-gray-500 mt-2">Firebase'i başlatırken sorun oluştu: ${error.message}</p>
-                        <p class="text-xs text-gray-400 mt-2">Bu genellikle 'auth/admin-restricted-operation' hatasıdır. Giriş yapmayı deneyin.</p>
+                        <p class="text-xs text-gray-400 mt-2">Bu genellikle kısıtlanmış Auth hatasıdır. Giriş yapmayı deneyin.</p>
                     </div>
                 `;
             }
@@ -280,8 +278,7 @@
             appElement.innerHTML = '';
             
             if (!userId && userRole === null) {
-                // Auth süreci tamamlanana veya AuthStateChanged bir kullanıcı durumu (null veya authenticated) döndürene kadar bekle.
-                // Eğer userId null ise ve custom token yoksa, Home view'a geçmek için hazırız.
+                // Auth sürecinin tamamlanmasını bekler.
                 if (document.getElementById('loading-screen').classList.contains('hidden')) {
                      // Loading ekranı kalktıysa devam et
                 } else {
@@ -415,7 +412,7 @@
                         <h2 class="text-3xl font-bold text-gray-900 mb-6 text-center">Hasta Kayıt (Telefon Tabanlı)</h2>
                         <div id="notification-container"></div>
                         <p class="text-sm text-red-500 mb-4 text-center font-medium">
-                            *Anonim giriş kısıtlı olduğu için, kayıt olmanız yeni bir Auth hesabı oluşturacaktır.
+                            *Sistem kısıtlı bir ortamda çalıştığı için, kayıt sırasında sorun yaşarsanız lütfen doğrudan "Doktor Girişi" seçeneğini kullanın.
                         </p>
                         <form id="patient-register-form">
                             <div class="mb-4">
@@ -710,16 +707,7 @@
             btn.disabled = true;
 
             try {
-                // Hata çözümü: Anonim giriş kısıtlıysa, kayıt sırasında geçici olarak anonim giriş yapıp sonra kullanıcının üzerine yazmak gerekir.
-                // Ancak "auth/admin-restricted-operation" hatası anonim girişi tamamen engellediği için, bu adımı es geçip
-                // kullanıcının e-posta/şifre ile giriş yapması gereken bir senaryo gibi davranabiliriz (Ama bu app'te telefon numarası kullanılıyor).
-
-                // Telefon numarasını benzersiz bir UID olarak kullanmak Firebase Auth'un dışındadır.
-                // Bu nedenle, önce anonim giriş yapıp bir UID almamız gerekiyor (ki bu da hata veriyor).
-                // Geçici Çözüm: Başarılı bir şekilde kimlik doğrulaması yapabilmek için, bu ortamda "Giriş Yap" düğmesi üzerinden gitmek en güvenlisidir.
-                // Ancak bu bir hasta kayıt formu olduğundan, burayı yine de Anonim giriş/yeni Auth kullanıcısı oluşturmaya zorlamalıyız.
-                
-                // Anonim Giriş ile bir UID almayı dene (tekrar hata verme riski var, ama Auth'suz belge yazamayız)
+                // Anonim giriş ile bir UID almayı dene (auth/admin-restricted-operation hatasını almamak için dikkatli ol)
                 let tempUser = auth.currentUser;
                 if (!tempUser || tempUser.isAnonymous) {
                      try {
@@ -728,7 +716,6 @@
                         tempUser = anonCred.user;
                      } catch(e) {
                          // Eğer burası tekrar 'auth/admin-restricted-operation' hatası verirse, kullanıcıyı kayıt edemeyiz.
-                         // Bu durumda kullanıcıyı uyar.
                          if (e.code === 'auth/admin-restricted-operation') {
                              throw new Error("Sistem kısıtlı bir ortamda çalışıyor. Lütfen doğrudan bir doktor hesabıyla giriş yapmayı deneyin.");
                          }
