@@ -1,491 +1,307 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hasta Randevu Paneli</title>
-    <!-- Tailwind CSS CDN -->
+    <title>RandevuTakip - Appointment Scheduler</title>
+    <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
             theme: {
                 extend: {
+                    colors: {
+                        'primary': '#4F46E5',
+                        'secondary': '#8B5CF6',
+                        'accent': '#EC4899',
+                    },
                     fontFamily: {
                         sans: ['Inter', 'sans-serif'],
-                    },
-                    colors: {
-                        primary: '#3b82f6', // Mavi (Hasta için)
-                        secondary: '#22c55e', // Yeşil (Onay için)
                     }
                 }
             }
         }
     </script>
+    <style>
+        /* Custom styles for better aesthetics */
+        body {
+            background-color: #f7f9fb;
+        }
+        .card {
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        .form-input {
+            transition: all 0.3s ease;
+            border-radius: 0.5rem; /* rounded-lg */
+        }
+        .form-input:focus {
+            outline: none;
+            border-color: #4F46E5;
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.5);
+        }
+    </style>
 </head>
-<body>
+<body class="font-sans min-h-screen p-4 sm:p-8">
 
-    <div id="app-container" class="min-h-screen p-4 sm:p-8 bg-gray-50 relative">
-        <div class="text-center p-10 text-xl text-primary font-semibold">Uygulama yükleniyor...</div>
+    <div id="app" class="max-w-4xl mx-auto">
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-extrabold text-primary mb-2">RandevuTakip 📅</h1>
+            <p class="text-lg text-gray-600">Real-Time Public Appointment Scheduler</p>
+        </header>
+
+        <!-- User Info & Status -->
+        <div id="status-card" class="bg-white card rounded-xl p-4 mb-8">
+            <p class="text-sm font-medium text-gray-700">
+                Status: <span id="auth-status" class="font-semibold text-accent">Loading...</span>
+            </p>
+            <div id="user-info-container" class="mt-2 hidden">
+                <p class="text-xs text-gray-500 break-all">
+                    User ID: <span id="user-id" class="font-mono text-gray-800"></span>
+                </p>
+            </div>
+        </div>
+
+        <!-- Scheduling Form Card -->
+        <div class="bg-white card rounded-xl p-6 mb-10">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4">Schedule a New Appointment</h2>
+            <form id="appointment-form" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <input type="date" id="date-input" required
+                    class="form-input border border-gray-300 p-3 w-full text-gray-700"
+                    placeholder="Date">
+                <input type="time" id="time-input" required
+                    class="form-input border border-gray-300 p-3 w-full text-gray-700"
+                    placeholder="Time">
+                <input type="text" id="description-input" required maxlength="100"
+                    class="form-input border border-gray-300 p-3 w-full md:col-span-3 text-gray-700"
+                    placeholder="Short Description (e.g., Doctor Appointment)">
+                <button type="submit" id="schedule-button" disabled
+                    class="md:col-span-3 bg-primary text-white font-semibold py-3 px-6 rounded-lg hover:bg-indigo-600 transition duration-200 disabled:opacity-50">
+                    Schedule Appointment
+                </button>
+            </form>
+            <div id="message-box" class="mt-4 p-3 rounded-lg text-sm hidden" role="alert"></div>
+        </div>
+
+        <!-- Appointment List Card -->
+        <div class="bg-white card rounded-xl p-6">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4 flex justify-between items-center">
+                Upcoming Appointments (Public)
+                <span id="appointment-count" class="text-sm font-medium text-primary bg-indigo-100 px-3 py-1 rounded-full">0</span>
+            </h2>
+            <div id="appointments-list" class="space-y-4">
+                <!-- Appointments will be rendered here -->
+                <div id="loading-appointments" class="text-center py-8 text-gray-500 hidden">
+                    <svg class="animate-spin h-5 w-5 text-primary mx-auto mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Loading appointments...
+                </div>
+                <p id="no-appointments" class="text-center py-8 text-gray-500 hidden">
+                    No appointments scheduled yet. Be the first!
+                </p>
+            </div>
+        </div>
     </div>
-    
-    <!-- Özel Onay Modalı Buraya Eklenecek -->
-    <div id="modal-portal"></div>
 
-    <!-- Firebase SDK'ları -->
+    <!-- Firebase SDKs -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { 
-            getAuth, 
-            signInAnonymously, 
-            signInWithCustomToken, 
-            onAuthStateChanged,
-            signOut
-        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { 
-            getFirestore, 
-            doc, 
-            addDoc, 
-            setDoc, 
-            onSnapshot, 
-            collection, 
-            query, 
-            where, 
-            serverTimestamp
-        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        
-        // --- SABİT TANIMLAMALAR ---
-        const DEFAULT_FEE = 350; 
-        const DOCTORS = [
-            { id: 'doc1', name: 'Dr. Ahmet Yılmaz', specialty: 'Kardiyoloji' },
-            { id: 'doc2', name: 'Dr. Elif Kaya', specialty: 'Dermatoloji' },
-            { id: 'doc3', name: 'Dr. Can Demir', specialty: 'Dahiliye' },
-        ];
-        const availableTimes = ['10:00', '11:00', '14:00', '15:00', '16:00'];
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // --- GLOBAL DEĞİŞKENLER VE FIREBASE BAĞLANTISI ---
-        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        // IMPORTANT: Use setLogLevel('Debug') for better debugging in the console
+        setLogLevel('Debug');
+
+        // 1. Firebase Environment Setup
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-        
-        let app, db, auth;
+
+        let db, auth;
         let userId = null;
-        let patientInfo = {}; 
-        let allAppointments = []; 
-        
-        const getCollectionPath = (collectionName) => {
-            // Ortak veritabanı yolu
-            return `/artifacts/${appId}/public/data/${collectionName}`;
-        };
+        let isAuthReady = false;
 
-        let appointmentsColRef = null;
-        let patientsColRef = null;
+        // Initialize App
+        const app = initializeApp(firebaseConfig);
+        db = getFirestore(app);
+        auth = getAuth(app);
 
-        // --- YARDIMCI FONKSİYONLAR ---
+        // UI Elements
+        const authStatusEl = document.getElementById('auth-status');
+        const userIdEl = document.getElementById('user-id');
+        const userInfoContainer = document.getElementById('user-info-container');
+        const scheduleButton = document.getElementById('schedule-button');
+        const formEl = document.getElementById('appointment-form');
+        const messageBoxEl = document.getElementById('message-box');
+        const appointmentsListEl = document.getElementById('appointments-list');
+        const loadingAppointmentsEl = document.getElementById('loading-appointments');
+        const noAppointmentsEl = document.getElementById('no-appointments');
+        const appointmentCountEl = document.getElementById('appointment-count');
 
-        const showMessage = (message, type = 'success') => {
-            const container = document.getElementById('message-container');
-            if (!container) return;
-            
-            const color = type === 'success' ? 'bg-green-100 border-green-400 text-green-700' : 'bg-red-100 border-red-400 text-red-700';
-            container.innerHTML = `
-                <div class="px-4 py-3 rounded relative border ${color} mb-4" role="alert">
-                    <span class="block sm:inline">${message}</span>
-                </div>
-            `;
-            setTimeout(() => { container.innerHTML = ''; }, 5000);
-        };
-        
-        // Özel Onay Modalı (window.confirm yerine)
-        const renderConfirmationModal = (message, onConfirm) => {
-            const modalPortal = document.getElementById('modal-portal');
-            if (!modalPortal) return;
-
-            modalPortal.innerHTML = `
-                <div id="custom-modal-backdrop" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50 p-4 transition-opacity duration-300">
-                    <div class="bg-white p-6 rounded-xl shadow-2xl max-w-sm w-full">
-                        <p class="text-lg font-semibold text-gray-800 mb-4">${message}</p>
-                        <div class="flex justify-end space-x-3">
-                            <button id="modal-cancel-btn" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition">
-                                Hayır, Vazgeç
-                            </button>
-                            <button id="modal-confirm-btn" class="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition">
-                                Evet, İptal Et
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            `;
-
-            const closeModal = () => {
-                modalPortal.innerHTML = '';
-            };
-
-            document.getElementById('modal-cancel-btn').addEventListener('click', closeModal);
-            document.getElementById('modal-confirm-btn').addEventListener('click', () => {
-                onConfirm();
-                closeModal();
-            });
-        };
-
-        const formatDate = (dateString) => {
-            if (!dateString) return 'Tarih Belirtilmemiş';
-            try {
-                const options = { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' };
-                return new Date(dateString).toLocaleDateString('tr-TR', options);
-            } catch (e) {
-                return dateString;
+        // Helper for displaying messages
+        function showMessage(text, isError = false) {
+            messageBoxEl.textContent = text;
+            messageBoxEl.classList.remove('hidden', 'bg-red-100', 'text-red-700', 'bg-green-100', 'text-green-700');
+            if (isError) {
+                messageBoxEl.classList.add('bg-red-100', 'text-red-700');
+            } else {
+                messageBoxEl.classList.add('bg-green-100', 'text-green-700');
             }
-        };
-        
-        const handleLogout = () => {
-             signOut(auth).then(() => {
-                renderRoleSelection();
-            }).catch(error => {
-                console.error("Çıkış Hatası:", error);
-            });
-        };
+            setTimeout(() => messageBoxEl.classList.add('hidden'), 5000);
+        }
 
-        // --- FIREBASE İLK BAŞLATMA VE YETKİLENDİRME ---
-
-        const initFirebase = async () => {
-            try {
-                // Firebase konfigürasyon kontrolü kaldırıldı (Konfigürasyonun Canvas tarafından sağlandığı varsayılır)
-                app = initializeApp(firebaseConfig);
-                db = getFirestore(app);
-                auth = getAuth(app);
+        // 2. Authentication Setup and Listener
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                userId = user.uid;
+                authStatusEl.textContent = 'Authenticated';
+                authStatusEl.classList.remove('text-accent');
+                authStatusEl.classList.add('text-green-600');
+                userIdEl.textContent = userId;
+                userInfoContainer.classList.remove('hidden');
+                scheduleButton.disabled = false;
+                isAuthReady = true;
                 
-                appointmentsColRef = collection(db, getCollectionPath('appointments'));
-                patientsColRef = collection(db, getCollectionPath('patients'));
+                // Start listening to appointments once authenticated
+                setupRealtimeListener();
 
-                onAuthStateChanged(auth, async (user) => {
-                    if (user) {
-                        userId = user.uid;
-                        renderPatientPanel();
-                        startPatientDataListeners();
+            } else {
+                // If not authenticated, attempt custom token or anonymous sign-in
+                try {
+                    authStatusEl.textContent = 'Authenticating...';
+                    if (initialAuthToken) {
+                        await signInWithCustomToken(auth, initialAuthToken);
+                        console.log("Signed in with custom token.");
                     } else {
-                        userId = null;
-                        if (initialAuthToken) {
-                            try {
-                                await signInWithCustomToken(auth, initialAuthToken);
-                            } catch (error) {
-                                console.error("Token ile Auth hatası, role seçim ekranına yönlendiriliyor:", error);
-                                // Eğer custom token başarısız olursa, role seçim ekranına yönlendir.
-                                renderRoleSelection();
-                            }
-                        } else {
-                            // Custom token yoksa, direkt role seçim ekranına yönlendir, kullanıcı anonim olarak giriş yapmalı.
-                            renderRoleSelection();
-                        }
+                        await signInAnonymously(auth);
+                        console.log("Signed in anonymously.");
                     }
-                });
-            } catch (error) {
-                console.error("Firebase başlatma hatası:", error);
-                document.getElementById('app-container').innerHTML = '<div class="text-center p-10 text-red-500">Uygulama başlatılamadı. Konfigürasyon hatası veya Canvas ortamı eksik.</div>';
+                } catch (error) {
+                    authStatusEl.textContent = 'Authentication Failed';
+                    authStatusEl.classList.remove('text-accent');
+                    authStatusEl.classList.add('text-red-600');
+                    console.error("Authentication Error:", error);
+                    showMessage("Failed to authenticate. Check console for details.", true);
+                    isAuthReady = true; // Still mark as ready to prevent infinite loading
+                }
             }
-        };
+        });
 
-        // --- ROL SEÇİM EKRANI (SADECE HASTA GİRİŞİ ODAGINDA) ---
+        // 3. Firestore Real-Time Data Setup
+        const APPOINTMENTS_COLLECTION_PATH = `artifacts/${appId}/public/data/appointments`;
 
-        const renderRoleSelection = () => {
-            const appContainer = document.getElementById('app-container');
-            appContainer.innerHTML = `
-                <div class="min-h-screen flex items-center justify-center bg-gray-100 p-6">
-                    <div class="max-w-md w-full bg-white p-8 rounded-2xl shadow-2xl border-t-8 border-primary">
-                        <h2 class="text-3xl font-extrabold text-gray-800 mb-4 text-center">Randevu Portalı Girişi</h2>
-                        <p class="text-gray-600 mb-6 text-center">
-                            Kayıt olmadan randevu oluşturmak ve mevcut randevularınızı takip etmek için misafir olarak hemen giriş yapın.
-                        </p>
-                        <button 
-                            id="patient-anon-login-btn" 
-                            class="w-full bg-primary hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl transition duration-300 shadow-lg"
-                        >
-                            Anonim Giriş Yap ve Randevu Al
-                        </button>
-                        <p class="mt-4 text-sm text-gray-500 text-center">
-                            Doktor iseniz, lütfen Doktor Paneli uygulamasına gidin.
-                        </p>
-                    </div>
-                </div>
-            `;
-            document.getElementById('patient-anon-login-btn').addEventListener('click', handlePatientAnonLogin);
-        };
-        
-        const handlePatientAnonLogin = async () => {
-            const btn = document.getElementById('patient-anon-login-btn');
-            btn.disabled = true;
-            btn.textContent = 'Giriş Yapılıyor...';
-            try {
-                await signInAnonymously(auth);
-            } catch (error) {
-                console.error("Anonim Giriş Hatası:", error);
-                showMessage("Anonim giriş başarısız. Lütfen tekrar deneyin.", 'error');
-                btn.disabled = false;
-                btn.textContent = 'Anonim Giriş Yap ve Randevu Al';
-            }
-        };
+        function setupRealtimeListener() {
+            if (!isAuthReady || !db) return;
 
-        // --- VERİ DİNLEYİCİLERİ ---
-        
-        const startPatientDataListeners = () => {
-            if (!db || !userId) return;
+            loadingAppointmentsEl.classList.remove('hidden');
 
-            // 1. Hasta Bilgilerini Dinle (isim ve telefon)
-            const patientDocRef = doc(patientsColRef, userId);
-            onSnapshot(patientDocRef, (docSnap) => {
-                patientInfo = docSnap.exists() ? docSnap.data() : { name: '', phone: '' };
-                updateBookingFormPatientInfo();
-            }, (err) => console.error("Hasta Bilgisi Dinleme Hatası:", err));
+            const appointmentsRef = collection(db, APPOINTMENTS_COLLECTION_PATH);
+            
+            // NOTE: We avoid using orderBy() in the query to prevent potential index errors,
+            // and instead sort the data client-side.
+            const q = query(appointmentsRef);
 
-            // 2. Kendi Randevularını Dinle
-            const q = query(
-                appointmentsColRef,
-                where('patientId', '==', userId) 
-            );
             onSnapshot(q, (snapshot) => {
-                allAppointments = snapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data(),
-                    createdAt: doc.data().createdAt?.toDate()?.toLocaleString('tr-TR') || 'N/A'
-                })).sort((a, b) => new Date(a.date) - new Date(b.date));
-                
-                updatePatientAppointmentsList();
-                updateAvailableSlots();
-            }, (err) => console.error("Hasta Randevu Listesi Dinleme Hatası:", err));
-        };
+                loadingAppointmentsEl.classList.add('hidden');
+                const appointments = [];
+                snapshot.forEach(doc => {
+                    appointments.push({ id: doc.id, ...doc.data() });
+                });
 
-        // --- HASTA PANELİ ARAYÜZÜ ---
+                // Sort appointments by date and time client-side
+                appointments.sort((a, b) => {
+                    const dateTimeA = new Date(`${a.date}T${a.time}`);
+                    const dateTimeB = new Date(`${b.date}T${b.time}`);
+                    return dateTimeA - dateTimeB;
+                });
 
-        const renderPatientPanel = () => {
-            const appContainer = document.getElementById('app-container');
-            const today = new Date().toISOString().split('T')[0];
+                renderAppointments(appointments);
+            }, (error) => {
+                loadingAppointmentsEl.classList.add('hidden');
+                console.error("Error fetching appointments:", error);
+                showMessage("Could not load appointments. Check connectivity.", true);
+            });
+        }
 
-            appContainer.innerHTML = `
-                <div class="min-h-screen bg-gray-100 p-4 sm:p-8">
-                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 max-w-6xl mx-auto">
-                        <h1 class="text-4xl font-extrabold text-primary">🏥 Hasta Randevu Portalı</h1>
-                        <div class="mt-4 sm:mt-0 flex items-center space-x-4">
-                            <span class="text-sm text-gray-600">Oturum ID: ${userId ? userId.substring(0, 8) + '...' : 'Anonim'}</span>
-                            <button id="logout-btn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300">
-                                Çıkış Yap
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <div id="message-container" class="max-w-6xl mx-auto"></div>
+        function renderAppointments(appointments) {
+            appointmentsListEl.innerHTML = '';
+            appointmentCountEl.textContent = appointments.length;
 
-                    <div class="max-w-6xl mx-auto space-y-12">
-                        <!-- Randevu Oluşturma Sekmesi -->
-                        <div class="bg-white p-6 md:p-8 rounded-2xl shadow-2xl">
-                            <h1 class="text-3xl font-bold text-primary">🗓️ Yeni Randevu Oluştur</h1>
-                            <form id="booking-form" class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-                                <!-- Kişisel Bilgiler -->
-                                <div class="md:col-span-2 space-y-4 p-4 border-2 border-dashed border-gray-300 rounded-xl bg-gray-50">
-                                    <h2 class="text-xl font-semibold text-gray-700">1. Kişisel Bilgileriniz</h2>
-                                    <input type="text" id="patient-name" name="name" placeholder="Adınız Soyadınız" required class="w-full px-4 py-3 border rounded-lg focus:ring-primary"/>
-                                    <input type="tel" id="patient-phone" name="phone" placeholder="Telefon Numaranız (Örn: 5xx xxx xx xx)" required class="w-full px-4 py-3 border rounded-lg focus:ring-primary"/>
-                                </div>
-                                <!-- Doktor Seçimi -->
-                                <div class="space-y-4">
-                                    <h2 class="text-xl font-semibold text-gray-700">2. Doktor Seçimi</h2>
-                                    <select id="appointment-doctor-id" required class="w-full px-4 py-3 border rounded-lg bg-white focus:ring-primary">
-                                        ${DOCTORS.map(d => `<option value="${d.id}">${d.name} (${d.specialty})</option>`).join('')}
-                                    </select>
-                                </div>
-                                <!-- Tarih ve Saat Seçimi -->
-                                <div class="space-y-4">
-                                    <h2 class="text-xl font-semibold text-gray-700">3. Randevu Tarihi ve Saati</h2>
-                                    <input type="date" id="appointment-date" value="${today}" min="${today}" required class="w-full px-4 py-3 border rounded-lg focus:ring-primary"/>
-                                    <select id="appointment-time" required class="w-full px-4 py-3 border rounded-lg bg-white focus:ring-primary">
-                                        <!-- Slotlar JS ile dolacak -->
-                                    </select>
-                                </div>
-                                <!-- Buton -->
-                                <div class="md:col-span-2 pt-4">
-                                    <p class="text-sm font-medium text-gray-600 mb-2 text-center">Randevu Ön Ücreti: <span class="font-bold text-lg text-secondary">${DEFAULT_FEE} TL</span></p>
-                                    <button type="submit" id="booking-submit-btn" class="w-full bg-secondary hover:bg-green-700 text-white font-bold py-3 rounded-lg shadow-lg transition duration-300">
-                                        Randevuyu Onayla ve Gönder
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
-                        
-                        <hr class="border-gray-300" />
-                        
-                        <!-- Randevularım Sekmesi -->
-                        <div class="bg-white p-6 md:p-8 rounded-2xl shadow-2xl">
-                            <h2 class="text-2xl font-bold text-primary border-b pb-2 mb-4">📋 Mevcut Randevularınız</h2>
-                            <div id="patient-appointments-list">
-                                <p class="text-center text-gray-500 py-4">Randevular yükleniyor...</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-            
-            document.getElementById('logout-btn').addEventListener('click', handleLogout);
-            document.getElementById('booking-form').addEventListener('submit', handleBooking);
-            
-            document.getElementById('appointment-doctor-id').addEventListener('change', updateAvailableSlots);
-            document.getElementById('appointment-date').addEventListener('change', updateAvailableSlots);
-
-            updateBookingFormPatientInfo();
-            updateAvailableSlots();
-        };
-
-        const updateBookingFormPatientInfo = () => {
-            const nameInput = document.getElementById('patient-name');
-            const phoneInput = document.getElementById('patient-phone');
-            if (nameInput) nameInput.value = patientInfo.name || '';
-            if (phoneInput) phoneInput.value = patientInfo.phone || '';
-        };
-
-        const updateAvailableSlots = () => {
-            const timeSelect = document.getElementById('appointment-time');
-            const selectedDoctorId = document.getElementById('appointment-doctor-id')?.value;
-            const selectedDate = document.getElementById('appointment-date')?.value;
-            
-            if (!timeSelect || !selectedDoctorId || !selectedDate) return;
-            
-            // Seçilen doktor ve tarihe ait rezerve edilmiş saatler
-            const bookedTimes = allAppointments
-                .filter(app => 
-                    app.doctorId === selectedDoctorId && 
-                    app.date === selectedDate && 
-                    (app.status === 'confirmed' || app.status === 'pending')
-                )
-                .map(app => app.time);
-
-            timeSelect.innerHTML = availableTimes.map(time => {
-                const isBooked = bookedTimes.includes(time);
-                return `
-                    <option value="${time}" ${isBooked ? 'disabled' : ''} class="${isBooked ? 'text-gray-400' : 'text-green-600'}">
-                        ${time} ${isBooked ? '(Dolu)' : '(Müsait)'}
-                    </option>
-                `;
-            }).join('');
-            
-            // İlk müsait slotu seç
-            if (timeSelect.querySelector('option:not([disabled])')) {
-                timeSelect.querySelector('option:not([disabled])').selected = true;
+            if (appointments.length === 0) {
+                noAppointmentsEl.classList.remove('hidden');
+                return;
             }
-        };
-        
-        const handleBooking = async (e) => {
+            noAppointmentsEl.classList.add('hidden');
+
+            appointments.forEach(app => {
+                const appointmentDate = new Date(`${app.date}T${app.time}`);
+                const formattedDate = appointmentDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+                const formattedTime = appointmentDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+
+                const item = document.createElement('div');
+                item.className = 'p-4 bg-indigo-50 rounded-xl border border-indigo-200';
+                item.innerHTML = `
+                    <div class="flex flex-col sm:flex-row sm:justify-between sm:items-start">
+                        <div>
+                            <p class="text-lg font-semibold text-gray-800">${app.description}</p>
+                            <p class="text-sm text-gray-500 mt-1">Scheduled by: <span class="font-mono text-xs">${app.createdBy.substring(0, 15)}...</span></p>
+                        </div>
+                        <div class="mt-2 sm:mt-0 text-right">
+                            <span class="inline-block bg-primary text-white text-xs font-bold px-3 py-1 rounded-full">${formattedDate}</span>
+                            <span class="inline-block bg-accent text-white text-xs font-bold px-3 py-1 rounded-full ml-2">${formattedTime}</span>
+                        </div>
+                    </div>
+                `;
+                appointmentsListEl.appendChild(item);
+            });
+        }
+
+        // 4. Form Submission Logic
+        formEl.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const submitBtn = document.getElementById('booking-submit-btn');
             
-            const selectedDoctorId = document.getElementById('appointment-doctor-id').value;
-            const selectedDate = document.getElementById('appointment-date').value;
-            const selectedTime = document.getElementById('appointment-time').value;
-            const patientName = document.getElementById('patient-name').value;
-            const patientPhone = document.getElementById('patient-phone').value;
-            
-            if (!selectedTime || document.getElementById('appointment-time').options[document.getElementById('appointment-time').selectedIndex]?.disabled) {
-                showMessage('Seçilen saat dolu veya geçersiz. Lütfen başka bir saat seçin.', 'error');
+            if (!userId) {
+                showMessage("Authentication not complete. Please wait.", true);
                 return;
             }
 
-            submitBtn.disabled = true;
-            submitBtn.textContent = 'Randevu Oluşturuluyor...';
+            const date = document.getElementById('date-input').value;
+            const time = document.getElementById('time-input').value;
+            const description = document.getElementById('description-input').value.trim();
+
+            if (!date || !time || !description) {
+                showMessage("Please fill in all fields.", true);
+                return;
+            }
+
+            scheduleButton.disabled = true;
+            scheduleButton.textContent = 'Scheduling...';
 
             try {
-                // 1. Hasta Bilgilerini Kaydet/Güncelle
-                const patientDocRef = doc(patientsColRef, userId);
-                await setDoc(patientDocRef, {
-                    uid: userId,
-                    name: patientName,
-                    phone: patientPhone,
-                    updatedAt: serverTimestamp(),
-                }, { merge: true });
+                const appointmentsRef = collection(db, APPOINTMENTS_COLLECTION_PATH);
 
-                // 2. Randevuyu Kaydet
-                const appointmentData = {
-                    date: selectedDate,
-                    time: selectedTime,
-                    doctorId: selectedDoctorId,
-                    doctorName: DOCTORS.find(d => d.id === selectedDoctorId)?.name || 'Bilinmeyen Doktor',
-                    patientId: userId,
-                    patientName: patientName,
-                    patientPhone: patientPhone,
-                    status: 'pending', 
-                    serviceFee: DEFAULT_FEE, 
-                    createdAt: serverTimestamp(),
+                const newAppointment = {
+                    date: date,
+                    time: time,
+                    description: description,
+                    createdBy: userId,
+                    createdAt: serverTimestamp(), // Use Firestore timestamp
                 };
 
-                await addDoc(appointmentsColRef, appointmentData);
+                await addDoc(appointmentsRef, newAppointment);
                 
-                showMessage('Randevunuz başarıyla oluşturuldu ve doktor onayı bekleniyor!', 'success');
+                showMessage("Appointment scheduled successfully!");
+                formEl.reset();
 
-            } catch (err) {
-                console.error("Randevu kaydetme hatası:", err);
-                showMessage('Randevu kaydedilirken bir hata oluştu: ' + err.message, 'error');
+            } catch (error) {
+                console.error("Error adding document: ", error);
+                showMessage(`Error scheduling appointment: ${error.message}`, true);
             } finally {
-                submitBtn.disabled = false;
-                submitBtn.textContent = 'Randevuyu Onayla ve Gönder';
+                scheduleButton.disabled = false;
+                scheduleButton.textContent = 'Schedule Appointment';
             }
-        };
-
-        const updatePatientAppointmentsList = () => {
-            const listContainer = document.getElementById('patient-appointments-list');
-            if (!listContainer) return;
-            
-            if (allAppointments.length === 0) {
-                listContainer.innerHTML = '<p class="text-gray-500">Henüz randevunuz bulunmamaktadır. Hemen yukarıdan randevu oluşturabilirsiniz!</p>';
-                return;
-            }
-
-            const html = allAppointments.map(app => {
-                const statusColor = app.status === 'confirmed' ? 'bg-green-100 border-green-500' : 
-                                     app.status === 'pending' ? 'bg-yellow-100 border-yellow-500' : 
-                                     'bg-red-100 border-red-500';
-                const statusTextClass = app.status === 'confirmed' ? 'text-green-800' : 
-                                          app.status === 'pending' ? 'text-yellow-800' : 'text-red-800';
-
-                return `
-                    <div class="p-4 border rounded-xl shadow-md ${statusColor} border-l-4">
-                        <p class="font-bold text-lg">${formatDate(app.date)} @ ${app.time}</p>
-                        <p class="text-sm text-gray-600">Doktor: <span class="font-medium">${app.doctorName}</span></p>
-                        <p class="text-sm text-gray-600">Ücret: <span class="font-bold text-secondary">${app.serviceFee || DEFAULT_FEE} TL</span></p>
-                        <p class="text-sm text-gray-600">Durum: 
-                            <span class="font-bold ml-1 px-2 py-1 rounded-full text-xs ${statusTextClass} bg-white/50">
-                                ${app.status === 'confirmed' ? 'ONAYLANDI' : app.status === 'pending' ? 'ONAY BEKLİYOR' : 'İPTAL EDİLDİ'}
-                            </span>
-                        </p>
-                        
-                        ${app.status === 'pending' ? `
-                            <button data-id="${app.id}" class="cancel-appointment-btn mt-3 text-sm bg-red-500 text-white px-3 py-1 rounded-lg hover:bg-red-600 transition">
-                                Randevuyu İptal Et
-                            </button>
-                        ` : ''}
-                    </div>
-                `;
-            }).join('');
-            
-            listContainer.innerHTML = `<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">${html}</div>`;
-            
-            document.querySelectorAll('.cancel-appointment-btn').forEach(btn => {
-                btn.addEventListener('click', handleCancelAppointment);
-            });
-        };
-        
-        const handleCancelAppointment = async (e) => {
-            const id = e.currentTarget.dataset.id;
-            
-            // window.confirm yerine özel modal kullanılıyor.
-            renderConfirmationModal("Bu randevuyu iptal etmek istediğinizden emin misiniz? Bu işlem geri alınamaz.", async () => {
-                try {
-                    const docRef = doc(appointmentsColRef, id);
-                    await setDoc(docRef, { status: 'cancelled' }, { merge: true });
-                    showMessage("Randevunuz başarıyla iptal edildi.", 'success');
-                } catch (error) {
-                    console.error("İptal hatası:", error);
-                    showMessage("Randevu iptal edilirken bir hata oluştu: " + error.message, 'error');
-                }
-            });
-        };
-
-        // Uygulamayı başlat
-        window.onload = initFirebase;
+        });
 
     </script>
 </body>
