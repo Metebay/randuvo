@@ -1,123 +1,112 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="tr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RandevuTakip - Randevu Planlayıcı</title>
-    <!-- Load Tailwind CSS -->
+    <title>Klinik Randevu Sistemi</title>
+    <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome (Icons) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
     <script>
+        // Tailwind konfigürasyonu
         tailwind.config = {
             theme: {
                 extend: {
                     colors: {
-                        'primary': '#4F46E5',
-                        'secondary': '#8B5CF6',
-                        'accent': '#EC4899',
+                        'primary': '#10b981', // Emerald 500
+                        'secondary': '#f97316', // Orange 500
+                        'accent': '#6366f1', // Indigo 500
                     },
                     fontFamily: {
                         sans: ['Inter', 'sans-serif'],
-                    }
+                    },
                 }
             }
         }
     </script>
     <style>
-        /* Custom styles for better aesthetics */
+        /* Inter fontunu Google Fonts'tan yükle */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        
         body {
-            background-color: #f7f9fb;
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
         }
-        .card {
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+
+        /* Loading spinner */
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid #fff;
+            border-radius: 50%;
+            width: 1.5rem;
+            height: 1.5rem;
+            animation: spin 1s linear infinite;
+            display: inline-block;
         }
-        .form-input {
-            transition: all 0.3s ease;
-            border-radius: 0.5rem; /* rounded-lg */
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
-        .form-input:focus {
-            outline: none;
-            border-color: #4F46E5;
-            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.5);
+
+        /* Custom scrollbar */
+        .scroll-area::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .scroll-area::-webkit-scrollbar-thumb {
+            background: #cbd5e1; /* Slate 300 */
+            border-radius: 4px;
         }
     </style>
 </head>
-<body class="font-sans min-h-screen p-4 sm:p-8">
+<body class="min-h-screen">
 
-    <div id="app" class="max-w-4xl mx-auto">
-        <header class="text-center mb-8">
-            <h1 class="text-4xl font-extrabold text-primary mb-2">RandevuTakip 📅</h1>
-            <p class="text-lg text-gray-600">Gerçek Zamanlı Herkese Açık Randevu Planlayıcı</p>
-        </header>
-
-        <!-- Kullanıcı Bilgisi ve Durumu -->
-        <div id="status-card" class="bg-white card rounded-xl p-4 mb-8">
-            <p class="text-sm font-medium text-gray-700">
-                Durum: <span id="auth-status" class="font-semibold text-accent">Yükleniyor...</span>
-            </p>
-            <div id="user-info-container" class="mt-2 hidden">
-                <p class="text-xs text-gray-500 break-all">
-                    Kullanıcı ID: <span id="user-id" class="font-mono text-gray-800"></span>
-                </p>
+    <div id="app" class="flex flex-col min-h-screen">
+        <!-- Başlangıçta yükleniyor ekranı -->
+        <div id="loading-screen" class="fixed inset-0 flex items-center justify-center bg-gray-50 z-50">
+            <div class="flex flex-col items-center p-6 bg-white rounded-xl shadow-lg">
+                <div class="spinner !border-primary !border-t-gray-300 !w-8 !h-8 mb-4"></div>
+                <p class="text-gray-600">Uygulama başlatılıyor...</p>
             </div>
         </div>
-
-        <!-- Randevu Oluşturma Formu Kartı -->
-        <div class="bg-white card rounded-xl p-6 mb-10">
-            <h2 class="text-2xl font-bold text-gray-800 mb-4">Yeni Randevu Oluştur</h2>
-            <form id="appointment-form" class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <input type="date" id="date-input" required
-                    class="form-input border border-gray-300 p-3 w-full text-gray-700"
-                    placeholder="Tarih">
-                <input type="time" id="time-input" required
-                    class="form-input border border-gray-300 p-3 w-full text-gray-700"
-                    placeholder="Saat">
-                <input type="text" id="description-input" required maxlength="100"
-                    class="form-input border border-gray-300 p-3 w-full md:col-span-3 text-gray-700"
-                    placeholder="Kısa Açıklama (örn: Doktor Randevusu)">
-                <button type="submit" id="schedule-button" disabled
-                    class="md:col-span-3 bg-primary text-white font-semibold py-3 px-6 rounded-lg hover:bg-indigo-600 transition duration-200 disabled:opacity-50">
-                    Randevu Oluştur
-                </button>
-            </form>
-            <div id="message-box" class="mt-4 p-3 rounded-lg text-sm hidden" role="alert"></div>
-        </div>
-
-        <!-- Randevu Listesi Kartı -->
-        <div class="bg-white card rounded-xl p-6">
-            <h2 class="text-2xl font-bold text-gray-800 mb-4 flex justify-between items-center">
-                Yaklaşan Randevular (Herkese Açık)
-                <span id="appointment-count" class="text-sm font-medium text-primary bg-indigo-100 px-3 py-1 rounded-full">0</span>
-            </h2>
-            <div id="appointments-list" class="space-y-4">
-                <!-- Randevular buraya yüklenecek -->
-                <div id="loading-appointments" class="text-center py-8 text-gray-500 hidden">
-                    <svg class="animate-spin h-5 w-5 text-primary mx-auto mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Randevular yükleniyor...
-                </div>
-                <p id="no-appointments" class="text-center py-8 text-gray-500 hidden">
-                    Henüz randevu yok. İlk siz olun!
-                </p>
-            </div>
-        </div>
+        
+        <!-- Ana İçerik Buraya Yüklenecek -->
     </div>
 
-    <!-- Firebase SDKs -->
+    <!-- Firebase SDK'ları -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, onSnapshot, query, serverTimestamp, setLogLevel, doc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { 
+            getAuth, 
+            signInAnonymously, 
+            signInWithCustomToken, 
+            onAuthStateChanged,
+            signInWithEmailAndPassword,
+            signOut
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { 
+            getFirestore, 
+            doc, 
+            setDoc, 
+            onSnapshot, 
+            collection, 
+            query, 
+            where, 
+            addDoc, 
+            deleteDoc,
+            updateDoc,
+            getDoc,
+            serverTimestamp,
+            setLogLevel
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // IMPORTANT: Use setLogLevel('Debug') for better debugging in the console
+        // Firestore log seviyesini ayarlama (Hata ayıklama için)
         setLogLevel('Debug');
 
-        // 1. Firebase Environment Setup
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-
-        // Kullanıcının sağladığı yapılandırma (Eğer ortam değişkenleri çalışmazsa fallback olarak kullanılır)
-        const hardcodedFirebaseConfig = {
+        // --- Firebase Ortam Değişkenleri ve Sizin Yapılandırmanız ---
+        const providedFirebaseConfig = {
             apiKey: "AIzaSyANE4jBU19fbVruV5NrtgPUvlfU4QCC0CA",
             authDomain: "randevutakip-7db24.firebaseapp.com",
             projectId: "randevutakip-7db24",
@@ -127,256 +116,846 @@
             measurementId: "G-2LEEET92VJ"
         };
         
-        // Ortam değişkenini kullanmayı dene, başarısız olursa kullanıcı yapılandırmasını kullan
-        let firebaseConfig = hardcodedFirebaseConfig;
-        try {
-            const envConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : 'null');
-            // Eğer ortamdan gelen config geçerli bir projectId içeriyorsa onu kullan
-            if (envConfig && envConfig.projectId) {
-                firebaseConfig = envConfig;
-            } else {
-                console.warn("Ortam Firebase yapılandırması boş veya geçersiz. Kullanıcının sağladığı yapılandırma kullanılıyor.");
-            }
-        } catch (e) {
-            console.warn("Ortam Firebase yapılandırması ayrıştırılamadı. Kullanıcının sağladığı yapılandırma kullanılıyor.");
-        }
-
+        // Canvas ortam değişkenlerini tercih et, yoksa sağlanan config'i kullan
+        const appId = typeof __app_id !== 'undefined' ? __app_id : providedFirebaseConfig.projectId;
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : providedFirebaseConfig;
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
-        let db, auth;
+        let app;
+        let db;
+        let auth;
         let userId = null;
-        let isAuthReady = false;
+        let userRole = null;
+        let userProfile = null;
+        let appointments = []; // Doktor randevuları
+        let patientAppointments = []; // Hasta randevuları
+        let patients = []; // Doktorların randevu oluştururken kullanacağı tüm hastalar
 
-        // Initialize App
-        const app = initializeApp(firebaseConfig);
-        db = getFirestore(app);
-        auth = getAuth(app);
+        // --- Firebase Yollarını ve Veri Fonksiyonlarını Yönetme ---
 
-        // UI Elements
-        const authStatusEl = document.getElementById('auth-status');
-        const userIdEl = document.getElementById('user-id');
-        const userInfoContainer = document.getElementById('user-info-container');
-        const scheduleButton = document.getElementById('schedule-button');
-        const formEl = document.getElementById('appointment-form');
-        const messageBoxEl = document.getElementById('message-box');
-        const appointmentsListEl = document.getElementById('appointments-list');
-        const loadingAppointmentsEl = document.getElementById('loading-appointments');
-        const noAppointmentsEl = document.getElementById('no-appointments');
-        const appointmentCountEl = document.getElementById('appointment-count');
+        // Ortak (public) koleksiyon yolu, güvenlik kurallarına uygun
+        const getCollectionPath = (collectionName) => {
+            return `artifacts/${appId}/public/data/${collectionName}`;
+        };
 
-        // Helper for displaying messages
-        function showMessage(text, isError = false) {
-            messageBoxEl.textContent = text;
-            messageBoxEl.classList.remove('hidden', 'bg-red-100', 'text-red-700', 'bg-green-100', 'text-green-700');
-            if (isError) {
-                messageBoxEl.classList.add('bg-red-100', 'text-red-700');
-            } else {
-                messageBoxEl.classList.add('bg-green-100', 'text-green-700');
-            }
-            setTimeout(() => messageBoxEl.classList.add('hidden'), 5000);
-        }
+        const userCollectionRef = () => collection(db, getCollectionPath('users'));
+        const appointmentCollectionRef = () => collection(db, getCollectionPath('appointments'));
 
-        // 2. Authentication Setup and Listener
-        onAuthStateChanged(auth, async (user) => {
-            if (user) {
-                userId = user.uid;
-                authStatusEl.textContent = 'Doğrulanmış';
-                authStatusEl.classList.remove('text-accent');
-                authStatusEl.classList.add('text-green-600');
-                userIdEl.textContent = userId;
-                userInfoContainer.classList.remove('hidden');
-                scheduleButton.disabled = false;
-                isAuthReady = true;
-                
-                // Start listening to appointments once authenticated
-                setupRealtimeListener();
+        // --- Başlatma ve Kimlik Doğrulama ---
 
-            } else {
-                // If not authenticated, attempt custom token or anonymous sign-in
-                try {
-                    authStatusEl.textContent = 'Doğrulanıyor...';
-                    if (initialAuthToken) {
-                        await signInWithCustomToken(auth, initialAuthToken);
-                        console.log("Signed in with custom token.");
+        const initializeFirebase = async () => {
+            try {
+                if (Object.keys(firebaseConfig).length === 0) {
+                    console.error("Firebase yapılandırması bulunamadı.");
+                    return;
+                }
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+                onAuthStateChanged(auth, async (user) => {
+                    userId = user ? user.uid : null;
+                    userRole = null;
+                    userProfile = null;
+
+                    if (userId) {
+                        await fetchUserProfile(userId);
                     } else {
-                        await signInAnonymously(auth);
-                        console.log("Signed in anonymously.");
+                         // Çıkış yapıldığında anonim giriş yap
+                         await signInAnonymously(auth);
                     }
+                    
+                    document.getElementById('loading-screen').classList.add('hidden');
+                    renderApp();
+                });
+            } catch (error) {
+                console.error("Firebase başlatılırken hata oluştu:", error);
+                document.getElementById('loading-screen').innerHTML = `
+                    <div class="text-center p-6 bg-white rounded-xl shadow-lg">
+                        <p class="text-red-600 font-bold">Uygulama Hatası</p>
+                        <p class="text-gray-500 mt-2">Firebase'i başlatırken sorun oluştu: ${error.message}</p>
+                    </div>
+                `;
+            }
+        };
+
+        const fetchUserProfile = async (uid) => {
+            if (!uid) return;
+            try {
+                const userDocRef = doc(db, getCollectionPath('users'), uid);
+                const userSnapshot = await getDoc(userDocRef);
+                
+                if (userSnapshot.exists()) {
+                    userProfile = { uid, ...userSnapshot.data() };
+                    userRole = userProfile.role;
+                } else {
+                    userRole = 'anonymous'; 
+                }
+            } catch (error) {
+                console.error("Kullanıcı profili çekilirken hata:", error);
+                userRole = 'anonymous';
+            }
+        };
+
+        // --- Randevu Dinleyicileri ---
+
+        const setupAppointmentListener = () => {
+            if (userRole !== 'doctor' || !userId) {
+                appointments = [];
+                return;
+            }
+
+            // Doktorun kendi randevularını dinle
+            const q = query(appointmentCollectionRef(), where("doctorId", "==", userId));
+            onSnapshot(q, (snapshot) => {
+                appointments = snapshot.docs.map(d => ({ 
+                    id: d.id, 
+                    ...d.data(), 
+                    datetime: d.data().datetime.toDate() 
+                }));
+                appointments.sort((a, b) => b.datetime.getTime() - a.datetime.getTime()); 
+                renderDoctorPanel();
+            }, (error) => {
+                console.error("Doktor randevularını dinlerken hata:", error);
+                showNotification("Randevuları çekerken bir sorun oluştu.", "error");
+            });
+
+            // Tüm hastaları çek (randevu oluşturma formu için)
+            const patientsQ = query(userCollectionRef(), where("role", "==", "patient"));
+            onSnapshot(patientsQ, (snapshot) => {
+                patients = snapshot.docs.map(d => ({ uid: d.id, ...d.data() }));
+                renderDoctorPanel(); 
+            });
+        };
+
+        const setupPatientAppointmentListener = () => {
+            if (userRole !== 'patient' || !userId) {
+                 patientAppointments = [];
+                 return;
+            }
+
+            // Hastanın kendi randevularını dinle
+            const q = query(appointmentCollectionRef(), where("patientId", "==", userId));
+            onSnapshot(q, (snapshot) => {
+                patientAppointments = snapshot.docs.map(d => ({ 
+                    id: d.id, 
+                    ...d.data(), 
+                    datetime: d.data().datetime.toDate() 
+                }));
+                patientAppointments.sort((a, b) => b.datetime.getTime() - a.datetime.getTime()); 
+                renderPatientPanel();
+            }, (error) => {
+                console.error("Hasta randevularını dinlerken hata:", error);
+                showNotification("Randevularınızı çekerken bir sorun oluştu.", "error");
+            });
+        };
+
+
+        // --- Router ve Görünüm Yönetimi ---
+
+        let currentView = 'home';
+
+        const navigate = (view) => {
+            currentView = view;
+            renderApp();
+        };
+
+        const renderApp = () => {
+            const appElement = document.getElementById('app');
+            appElement.innerHTML = '';
+            
+            if (!userId) {
+                // Auth süreci henüz tamamlanmadıysa, beklemeye devam et.
+                return; 
+            }
+
+            // Başlık ve Navigasyon Barını Ekle
+            const headerHtml = renderHeader();
+            appElement.insertAdjacentHTML('afterbegin', headerHtml);
+
+            if (userRole === 'doctor') {
+                if (currentView !== 'doctor-panel') {
+                     currentView = 'doctor-panel';
+                     setupAppointmentListener();
+                }
+                renderDoctorPanel(appElement);
+            } else if (userRole === 'patient') {
+                if (currentView !== 'patient-panel') {
+                    currentView = 'patient-panel';
+                    setupPatientAppointmentListener();
+                }
+                renderPatientPanel(appElement);
+            } else {
+                // 'anonymous' veya bilinmeyen rol
+                renderHome(appElement);
+            }
+        };
+
+        // --- UI Bileşenleri ve Yardımcı Fonksiyonlar ---
+
+        const showNotification = (message, type) => {
+            const container = document.getElementById('notification-container');
+            if (!container) return;
+
+            const bgColor = type === 'success' ? 'bg-primary' : 'bg-red-500';
+            const html = `
+                <div class="${bgColor} text-white px-4 py-3 rounded-xl shadow-2xl mb-4 transition-all duration-500 transform translate-y-0" role="alert" style="opacity: 1;">
+                    <p class="font-bold">${type === 'success' ? 'Başarılı' : 'Hata'}</p>
+                    <p class="text-sm">${message}</p>
+                </div>
+            `;
+            container.innerHTML = html;
+            
+            // 4 saniye sonra bildirim kaybolur
+            setTimeout(() => {
+                const element = container.querySelector('div');
+                if (element) {
+                    element.style.opacity = '0';
+                    element.style.transform = 'translateY(-10px)';
+                    setTimeout(() => container.innerHTML = '', 500);
+                }
+            }, 4000);
+        };
+
+        const renderHeader = () => {
+            const isLoggedIn = userRole !== 'anonymous' && userRole !== null;
+            const roleText = userRole === 'doctor' ? 'Doktor' : (userRole === 'patient' ? 'Hasta' : '');
+            
+            let navItems = '';
+            if (isLoggedIn) {
+                const name = userProfile?.name || '';
+                const surname = userProfile?.surname || '';
+                const displayId = userId ? `${userId.substring(0, 4)}...${userId.substring(userId.length - 4)}` : '';
+
+                navItems = `
+                    <div class="hidden lg:block text-white text-sm mr-4 text-right">
+                        <span class="font-bold">${name} ${surname}</span> (${roleText})<br>
+                        <span class="text-xs text-gray-400">UID: ${displayId}</span>
+                    </div>
+                    <button id="logout-btn" class="ml-2 px-4 py-1.5 bg-secondary hover:bg-orange-600 text-white text-sm font-semibold rounded-lg shadow-md transition-colors duration-200">
+                        <i class="fas fa-sign-out-alt mr-1"></i> Çıkış Yap
+                    </button>
+                `;
+            } else {
+                navItems = `
+                    <button onclick="navigate('doctor-login')" class="px-3 py-1.5 bg-accent hover:bg-indigo-600 text-white text-sm font-semibold rounded-lg shadow-md transition-colors duration-200 mr-2">
+                        Doktor Girişi
+                    </button>
+                    <button onclick="navigate('patient-register')" class="px-3 py-1.5 bg-primary hover:bg-emerald-600 text-white text-sm font-semibold rounded-lg shadow-md transition-colors duration-200">
+                        Hasta Kayıt
+                    </button>
+                `;
+            }
+
+            return `
+                <header class="bg-gray-800 shadow-xl sticky top-0 z-10">
+                    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
+                        <h1 class="text-xl font-bold text-white cursor-pointer" onclick="navigate('home')">
+                            <i class="fas fa-clinic-medical mr-2 text-primary"></i> KLİNİK YÖNETİM
+                        </h1>
+                        <nav class="flex items-center">
+                            ${navItems}
+                        </nav>
+                    </div>
+                </header>
+            `;
+        };
+
+        // --- Görünüm Fonksiyonları ---
+
+        const renderHome = (appElement) => {
+             const html = `
+                <main class="flex-grow flex items-center justify-center bg-gray-50 p-4">
+                    <div class="max-w-xl w-full p-8 bg-white rounded-2xl shadow-2xl text-center">
+                        <h2 class="text-4xl font-extrabold text-gray-900 mb-4">Kliniğimize Hoş Geldiniz</h2>
+                        <p class="text-gray-600 mb-8">Lütfen size uygun olan giriş/kayıt seçeneğini kullanın.</p>
+                        
+                        <div class="flex flex-col space-y-4">
+                            <button onclick="navigate('doctor-login')" class="w-full py-3 bg-accent hover:bg-indigo-600 text-white font-bold rounded-xl shadow-lg transition-transform transform hover:scale-[1.01]">
+                                <i class="fas fa-user-md mr-2"></i> Doktor Girişi
+                            </button>
+                            <button onclick="navigate('patient-register')" class="w-full py-3 bg-primary hover:bg-emerald-600 text-white font-bold rounded-xl shadow-lg transition-transform transform hover:scale-[1.01]">
+                                <i class="fas fa-user-plus mr-2"></i> Hasta Kayıt Ol
+                            </button>
+                        </div>
+                    </div>
+                </main>
+            `;
+            appElement.innerHTML += html;
+        };
+        
+        const renderPatientRegister = (appElement) => {
+            const html = `
+                <main class="flex-grow flex items-center justify-center bg-gray-50 p-4">
+                    <div class="max-w-md w-full p-8 bg-white rounded-2xl shadow-2xl">
+                        <h2 class="text-3xl font-bold text-gray-900 mb-6 text-center">Hasta Kayıt (Telefon Tabanlı)</h2>
+                        <div id="notification-container"></div>
+                        <form id="patient-register-form">
+                            <div class="mb-4">
+                                <label for="reg-name" class="block text-sm font-medium text-gray-700 mb-1">Adınız</label>
+                                <input type="text" id="reg-name" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
+                            </div>
+                            <div class="mb-4">
+                                <label for="reg-surname" class="block text-sm font-medium text-gray-700 mb-1">Soyadınız</label>
+                                <input type="text" id="reg-surname" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
+                            </div>
+                            <div class="mb-6">
+                                <label for="reg-phone" class="block text-sm font-medium text-gray-700 mb-1">Telefon Numarası (Örn: 5551234567)</label>
+                                <input type="tel" id="reg-phone" required pattern="[0-9]{10,15}" title="Lütfen geçerli bir telefon numarası girin." class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
+                            </div>
+                            <button type="submit" id="reg-submit-btn" class="w-full py-3 bg-primary hover:bg-emerald-600 text-white font-bold rounded-xl shadow-lg transition-colors duration-200 flex items-center justify-center">
+                                <span id="reg-btn-text"><i class="fas fa-user-plus mr-2"></i> Kayıt Ol</span>
+                                <div id="reg-spinner" class="spinner hidden"></div>
+                            </button>
+                        </form>
+                        <p class="mt-4 text-center text-sm text-gray-600">
+                            Doktor musunuz? <a href="#" onclick="navigate('doctor-login')" class="font-medium text-accent hover:text-indigo-600">Doktor Girişi</a> yapın.
+                        </p>
+                    </div>
+                </main>
+            `;
+            appElement.innerHTML += html;
+            document.getElementById('patient-register-form').addEventListener('submit', handlePatientRegistration);
+        };
+
+        const renderDoctorLogin = (appElement) => {
+            const html = `
+                <main class="flex-grow flex items-center justify-center bg-gray-50 p-4">
+                    <div class="max-w-md w-full p-8 bg-white rounded-2xl shadow-2xl">
+                        <h2 class="text-3xl font-bold text-gray-900 mb-6 text-center">Doktor Girişi (E-posta/Şifre)</h2>
+                        <div id="notification-container"></div>
+                        <p class="text-sm text-gray-500 mb-6 text-center">
+                            *Bu hesaplar yönetici tarafından Firebase Auth'a eklenmiş olmalıdır.
+                        </p>
+                        <form id="doctor-login-form">
+                            <div class="mb-4">
+                                <label for="login-email" class="block text-sm font-medium text-gray-700 mb-1">E-posta</label>
+                                <input type="email" id="login-email" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-accent focus:border-accent">
+                            </div>
+                            <div class="mb-6">
+                                <label for="login-password" class="block text-sm font-medium text-gray-700 mb-1">Şifre</label>
+                                <input type="password" id="login-password" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-accent focus:border-accent">
+                            </div>
+                            <button type="submit" id="login-submit-btn" class="w-full py-3 bg-accent hover:bg-indigo-600 text-white font-bold rounded-xl shadow-lg transition-colors duration-200 flex items-center justify-center">
+                                <span id="login-btn-text"><i class="fas fa-sign-in-alt mr-2"></i> Giriş Yap</span>
+                                <div id="login-spinner" class="spinner hidden"></div>
+                            </button>
+                        </form>
+                    </div>
+                </main>
+            `;
+            appElement.innerHTML += html;
+            document.getElementById('doctor-login-form').addEventListener('submit', handleDoctorLogin);
+        };
+
+        const renderDoctorPanel = (appElement) => {
+            if (userRole !== 'doctor') return;
+
+            const appointmentsHtml = appointments.length === 0 ? 
+                '<p class="text-center text-gray-500 mt-8">Bugüne veya geleceğe ait randevu bulunmamaktadır.</p>' :
+                appointments.map(renderAppointmentCard).join('');
+
+            const html = `
+                <main class="flex-grow p-4 sm:p-8">
+                    <div class="max-w-7xl mx-auto">
+                        <h2 class="text-4xl font-extrabold text-gray-900 mb-8">
+                            <i class="fas fa-stethoscope mr-3 text-accent"></i> Doktor Paneli (${userProfile.name} ${userProfile.surname})
+                        </h2>
+                        <div id="notification-container" class="mb-6"></div>
+
+                        <!-- Randevu Oluşturma ve Filtreleme -->
+                        <div class="bg-white p-6 rounded-2xl shadow-xl mb-8">
+                            <h3 class="text-2xl font-bold text-gray-800 mb-4 flex justify-between items-center">
+                                Randevu İşlemleri
+                                <button onclick="toggleNewAppointmentForm()" class="px-4 py-2 bg-primary hover:bg-emerald-600 text-white font-semibold rounded-lg shadow-md transition-colors duration-200">
+                                    <i class="fas fa-calendar-plus mr-2"></i> Yeni Randevu Oluştur
+                                </button>
+                            </h3>
+                            <!-- Yeni Randevu Formu (Toggleable) -->
+                            <div id="new-appointment-form-container" class="hidden mt-4 pt-4 border-t border-gray-200">
+                                ${renderNewAppointmentForm()}
+                            </div>
+                        </div>
+
+                        <!-- Randevu Listesi -->
+                        <div class="bg-white p-6 rounded-2xl shadow-xl">
+                            <h3 class="text-2xl font-bold text-gray-800 mb-4">
+                                <i class="fas fa-list-ul mr-2 text-primary"></i> Randevu Listesi (Gelecekten Geçmişe)
+                            </h3>
+                            <div id="appointment-list" class="scroll-area space-y-4 max-h-[70vh] overflow-y-auto">
+                                ${appointmentsHtml}
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Modal Placeholder -->
+                    <div id="modal-container"></div>
+                </main>
+            `;
+            appElement.innerHTML += html;
+            
+            // Event listener'ları yeniden bağla
+            document.querySelectorAll('.delete-btn').forEach(btn => btn.addEventListener('click', handleDeleteClick));
+            document.querySelectorAll('.edit-btn').forEach(btn => btn.addEventListener('click', handleEditClick));
+        };
+        
+        const renderNewAppointmentForm = () => {
+             const patientOptions = patients.map(p => 
+                `<option value="${p.uid}" data-name="${p.name} ${p.surname}">${p.name} ${p.surname} (Tel: ${p.phone})</option>`
+            ).join('');
+
+            const today = new Date().toISOString().slice(0, 10);
+            const now = new Date();
+            const timeString = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+            
+            return `
+                <form id="new-appointment-form" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="md:col-span-1">
+                        <label for="new-patient-id" class="block text-sm font-medium text-gray-700 mb-1">Hasta Seçin</label>
+                        <select id="new-patient-id" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
+                            <option value="" disabled selected>--- Kayıtlı Hasta Seçiniz ---</option>
+                            ${patientOptions}
+                        </select>
+                    </div>
+                    <div>
+                        <label for="new-date" class="block text-sm font-medium text-gray-700 mb-1">Tarih</label>
+                        <input type="date" id="new-date" required min="${today}" value="${today}" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
+                    </div>
+                    <div>
+                        <label for="new-time" class="block text-sm font-medium text-gray-700 mb-1">Saat</label>
+                        <input type="time" id="new-time" required value="${timeString}" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
+                    </div>
+                    <div class="md:col-span-3">
+                        <label for="new-notes" class="block text-sm font-medium text-gray-700 mb-1">Kısa Açıklama/Notlar</label>
+                        <textarea id="new-notes" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary" placeholder="Randevu nedeni veya notlar..."></textarea>
+                    </div>
+                    <div class="md:col-span-3 text-right">
+                        <button type="submit" id="new-appointment-btn" class="px-6 py-2 bg-primary hover:bg-emerald-600 text-white font-bold rounded-lg shadow-md transition-colors duration-200">
+                            Randevuyu Kaydet
+                        </button>
+                    </div>
+                </form>
+            `;
+        };
+
+        const renderAppointmentCard = (app) => {
+            const patient = patients.find(p => p.uid === app.patientId);
+            const patientName = patient ? `${patient.name} ${patient.surname}` : 'Bilinmiyor';
+            const dateStr = app.datetime.toLocaleDateString('tr-TR', { day: '2-digit', month: 'short', year: 'numeric' });
+            const timeStr = app.datetime.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+            
+            let statusBadge = '';
+            let feeStatus = '';
+            if (app.procedure && app.procedure.length > 0) {
+                 statusBadge = '<span class="px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full">Tamamlandı</span>';
+            } else {
+                 statusBadge = '<span class="px-2 py-1 bg-yellow-100 text-yellow-700 text-xs font-medium rounded-full">Planlandı</span>';
+            }
+
+            if (app.fee > 0) {
+                 feeStatus = `<span class="text-sm font-semibold text-green-600">${app.fee} TL</span>`;
+            } else {
+                 feeStatus = '<span class="text-sm font-semibold text-red-600">Ücret Girilmedi</span>';
+            }
+
+
+            return `
+                <div class="bg-gray-50 border border-gray-200 p-4 rounded-xl shadow-sm hover:shadow-md transition-shadow duration-200 flex flex-col md:flex-row justify-between">
+                    <div class="flex-grow">
+                        <div class="flex items-center space-x-2 mb-2">
+                            <p class="text-lg font-bold text-gray-800">
+                                <i class="fas fa-user-injured mr-2 text-accent"></i> ${patientName}
+                            </p>
+                             ${statusBadge}
+                        </div>
+                        <p class="text-sm text-gray-600 mb-1">
+                            <i class="fas fa-calendar-alt mr-2 text-primary"></i> ${dateStr} - ${timeStr}
+                        </p>
+                        <p class="text-sm text-gray-500 italic mb-2">
+                            <i class="fas fa-sticky-note mr-2 text-gray-400"></i> ${app.notes || 'Açıklama yok'}
+                        </p>
+                        <div class="mt-2 text-sm">
+                            <span class="font-medium text-gray-700">Ücret:</span> ${feeStatus}
+                        </div>
+                    </div>
+                    <div class="flex flex-col space-y-2 mt-3 md:mt-0 md:ml-4 justify-start min-w-[150px]">
+                        <button data-id="${app.id}" class="edit-btn px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm font-semibold rounded-lg transition-colors duration-200">
+                            <i class="fas fa-edit"></i> İşlem/Ücret Ekle
+                        </button>
+                        <button data-id="${app.id}" class="delete-btn px-4 py-2 bg-red-500 hover:bg-red-600 text-white text-sm font-semibold rounded-lg transition-colors duration-200">
+                            <i class="fas fa-trash-alt"></i> Sil
+                        </button>
+                    </div>
+                </div>
+            `;
+        };
+        
+        const renderPatientAppointmentCard = (app) => {
+            const dateStr = app.datetime.toLocaleDateString('tr-TR', { day: '2-digit', month: 'long', year: 'numeric' });
+            const timeStr = app.datetime.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+            
+            let statusBadge = '';
+            if (app.procedure && app.procedure.length > 0) {
+                 statusBadge = '<span class="px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full">Tamamlandı</span>';
+            } else {
+                 statusBadge = '<span class="px-2 py-1 bg-yellow-100 text-yellow-700 text-xs font-medium rounded-full">Planlandı</span>';
+            }
+
+            return `
+                <div class="bg-white border border-gray-200 p-4 rounded-xl shadow-md flex justify-between items-center hover:bg-gray-50 transition-colors">
+                    <div class="flex-grow">
+                        <p class="text-lg font-bold text-gray-800">
+                            <i class="fas fa-calendar-check mr-2 text-primary"></i> ${dateStr} - ${timeStr}
+                        </p>
+                        <p class="text-sm text-gray-600 italic mt-1">
+                            Dr. ${app.doctorName} Randevusu
+                        </p>
+                        <p class="text-sm text-gray-500 mt-1">
+                            <span class="font-medium">Açıklama:</span> ${app.notes || 'Randevu notu yok.'}
+                        </p>
+                    </div>
+                    <div class="min-w-fit ml-4">
+                        ${statusBadge}
+                    </div>
+                </div>
+            `;
+        };
+
+        const renderPatientPanel = (appElement) => {
+            const patientAppointmentsHtml = patientAppointments.length === 0 ? 
+                '<p class="text-center text-gray-500 mt-8">Henüz kayıtlı veya geçmiş randevunuz bulunmamaktadır.</p>' :
+                patientAppointments.map(renderPatientAppointmentCard).join('');
+
+             const html = `
+                <main class="flex-grow p-4 sm:p-8">
+                    <div class="max-w-4xl mx-auto">
+                        <h2 class="text-4xl font-extrabold text-gray-900 mb-8">
+                            <i class="fas fa-user-circle mr-3 text-primary"></i> Hasta Paneli
+                        </h2>
+                        <div id="notification-container" class="mb-6"></div>
+
+                        <!-- Kullanıcı Bilgileri -->
+                        <div class="bg-white p-6 rounded-2xl shadow-xl mb-8 border-t-4 border-primary">
+                            <h3 class="text-2xl font-bold text-gray-800 mb-4">
+                                <i class="fas fa-info-circle mr-2 text-accent"></i> Bilgileriniz
+                            </h3>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-gray-700">
+                                <p><span class="font-semibold">Ad Soyad:</span> ${userProfile.name} ${userProfile.surname}</p>
+                                <p><span class="font-semibold">Telefon:</span> ${userProfile.phone}</p>
+                            </div>
+                        </div>
+
+                         <!-- Randevu Listesi -->
+                        <div class="bg-white p-6 rounded-2xl shadow-xl">
+                            <h3 class="text-2xl font-bold text-gray-800 mb-4">
+                                <i class="fas fa-history mr-2 text-accent"></i> Randevu Geçmişiniz
+                            </h3>
+                            <div class="scroll-area space-y-4 max-h-[60vh] overflow-y-auto">
+                                ${patientAppointmentsHtml}
+                            </div>
+                        </div>
+                    </div>
+                </main>
+            `;
+            appElement.innerHTML += html;
+        };
+
+
+        // --- Olay İşleyicileri (Event Handlers) ve Firebase İşlemleri ---
+
+        const handlePatientRegistration = async (e) => {
+            e.preventDefault();
+            const form = e.target;
+            const name = form.elements['reg-name'].value.trim();
+            const surname = form.elements['reg-surname'].value.trim();
+            const phone = form.elements['reg-phone'].value.trim();
+            
+            const btn = document.getElementById('reg-submit-btn');
+            const btnText = document.getElementById('reg-btn-text');
+            const spinner = document.getElementById('reg-spinner');
+
+            if (!name || !surname || !phone || !phone.match(/^[0-9]{10,15}$/)) {
+                showNotification("Lütfen tüm alanları doldurun ve geçerli bir telefon numarası girin.", "error");
+                return;
+            }
+
+            btnText.classList.add('hidden');
+            spinner.classList.remove('hidden');
+            btn.disabled = true;
+
+            try {
+                // Not: Güvenlik kuralları, sadece Auth olmuş kullanıcının kendi UID'sine yazmasına izin verir.
+                const userDocRef = doc(db, getCollectionPath('users'), userId);
+                await setDoc(userDocRef, {
+                    name,
+                    surname,
+                    phone,
+                    role: 'patient',
+                    createdAt: serverTimestamp()
+                }, { merge: true }); // Merge: Anonim auth'un üzerine yazmak için.
+
+                showNotification("Kayıt başarılı! Hasta Paneline yönlendiriliyorsunuz.", "success");
+                await fetchUserProfile(userId); 
+                navigate('patient-panel');
+
+            } catch (error) {
+                console.error("Hasta kayıt hatası:", error);
+                showNotification(`Kayıt olurken bir hata oluştu: ${error.message}`, "error");
+            } finally {
+                btnText.classList.remove('hidden');
+                spinner.classList.add('hidden');
+                btn.disabled = false;
+            }
+        };
+
+        const handleDoctorLogin = async (e) => {
+            e.preventDefault();
+            const form = e.target;
+            const email = form.elements['login-email'].value.trim();
+            const password = form.elements['login-password'].value.trim();
+
+            const btn = document.getElementById('login-submit-btn');
+            const btnText = document.getElementById('login-btn-text');
+            const spinner = document.getElementById('login-spinner');
+
+            btnText.classList.add('hidden');
+            spinner.classList.remove('hidden');
+            btn.disabled = true;
+
+            try {
+                const userCredential = await signInWithEmailAndPassword(auth, email, password);
+                const uid = userCredential.user.uid;
+                
+                // Firestore'dan rolü çek ve doktor olup olmadığını kontrol et
+                const userDocRef = doc(db, getCollectionPath('users'), uid);
+                const userSnap = await getDoc(userDocRef);
+
+                if (!userSnap.exists() || userSnap.data().role !== 'doctor') {
+                    await signOut(auth);
+                    throw new Error("Giriş yetkisi reddedildi: Bu hesap bir doktor hesabı değildir.");
+                }
+
+                showNotification("Doktor girişi başarılı!", "success");
+                // onAuthStateChanged tetiklenecek ve paneli render edecek
+            } catch (error) {
+                console.error("Doktor giriş hatası:", error);
+                // Firebase Auth hata kodlarını kullanıcı dostu mesaja çevir
+                let errorMessage = 'Giriş başarısız. Lütfen e-posta ve şifrenizi kontrol edin.';
+                if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+                    errorMessage = 'E-posta veya şifre hatalı.';
+                } else if (error.message) {
+                    errorMessage = error.message;
+                }
+                showNotification(errorMessage, "error");
+            } finally {
+                btnText.classList.remove('hidden');
+                spinner.classList.add('hidden');
+                btn.disabled = false;
+            }
+        };
+
+        // Çıkış İşlemi
+        document.addEventListener('click', async (e) => {
+            if (e.target.id === 'logout-btn' || e.target.closest('#logout-btn')) {
+                try {
+                    await signOut(auth);
+                    showNotification("Başarıyla çıkış yaptınız.", "success");
+                    // onAuthStateChanged tetiklenecek ve anonim giriş/ana sayfaya yönlendirecek
                 } catch (error) {
-                    authStatusEl.textContent = 'Doğrulama Başarısız';
-                    authStatusEl.classList.remove('text-accent');
-                    authStatusEl.classList.add('text-red-600');
-                    console.error("Authentication Error:", error);
-                    showMessage("Doğrulama başarısız oldu. Ayrıntılar için konsolu kontrol edin.", true);
-                    isAuthReady = true; // Still mark as ready to prevent infinite loading
+                    console.error("Çıkış hatası:", error);
+                    showNotification("Çıkış yaparken bir sorun oluştu.", "error");
                 }
             }
         });
 
-        // 3. Firestore Real-Time Data Setup
-        const APPOINTMENTS_COLLECTION_PATH = `artifacts/${appId}/public/data/appointments`;
+        // Yeni Randevu Formunu Gösterme/Gizleme
+        window.toggleNewAppointmentForm = () => {
+            const container = document.getElementById('new-appointment-form-container');
+            const form = document.getElementById('new-appointment-form');
 
-        function setupRealtimeListener() {
-            if (!isAuthReady || !db) return;
-
-            loadingAppointmentsEl.classList.remove('hidden');
-
-            const appointmentsRef = collection(db, APPOINTMENTS_COLLECTION_PATH);
-            
-            // NOTE: We avoid using orderBy() in the query to prevent potential index errors,
-            // and instead sort the data client-side.
-            const q = query(appointmentsRef);
-
-            onSnapshot(q, (snapshot) => {
-                loadingAppointmentsEl.classList.add('hidden');
-                const appointments = [];
-                snapshot.forEach(doc => {
-                    appointments.push({ id: doc.id, ...doc.data() });
-                });
-
-                // Sort appointments by date and time client-side
-                appointments.sort((a, b) => {
-                    // Check for invalid or null dates/times before comparison
-                    const dateTimeAString = `${a.date || '0001-01-01'}T${a.time || '00:00'}`;
-                    const dateTimeBString = `${b.date || '0001-01-01'}T${b.time || '00:00'}`;
-                    
-                    const dateTimeA = new Date(dateTimeAString);
-                    const dateTimeB = new Date(dateTimeBString);
-
-                    // Handle invalid dates by pushing them to the end
-                    if (isNaN(dateTimeA.getTime())) return 1;
-                    if (isNaN(dateTimeB.getTime())) return -1;
-
-                    return dateTimeA - dateTimeB;
-                });
-
-                renderAppointments(appointments);
-            }, (error) => {
-                loadingAppointmentsEl.classList.add('hidden');
-                console.error("Error fetching appointments:", error);
-                showMessage("Randevular yüklenemedi. Bağlantıyı kontrol edin.", true);
-            });
-        }
-        
-        // 5. Deletion Logic
-        async function deleteAppointment(appointmentId) {
-            if (!userId) {
-                showMessage("Randevu silmek için oturum açmış olmanız gerekir.", true);
-                return;
+            if (container.classList.contains('hidden')) {
+                // Açılıyor
+                container.classList.remove('hidden');
+                if (form) form.addEventListener('submit', handleNewAppointment);
+            } else {
+                // Kapanıyor
+                container.classList.add('hidden');
+                if (form) form.removeEventListener('submit', handleNewAppointment);
             }
+        };
 
-            // Custom non-alert confirmation (using window.confirm as a fallback for simple confirmation UI)
-            if (!window.confirm("Bu randevuyu silmek istediğinizden emin misiniz?")) {
+        const handleNewAppointment = async (e) => {
+            e.preventDefault();
+            const form = e.target;
+            const patientId = form.elements['new-patient-id'].value;
+            const dateStr = form.elements['new-date'].value;
+            const timeStr = form.elements['new-time'].value;
+            const notes = form.elements['new-notes'].value.trim();
+            
+            const datetime = new Date(`${dateStr}T${timeStr}`);
+            
+            if (!patientId || isNaN(datetime)) {
+                showNotification("Lütfen tüm randevu bilgilerini (Hasta, Tarih, Saat) doğru girin.", "error");
                 return;
             }
             
+            const patientElement = form.elements['new-patient-id'].querySelector(`option[value="${patientId}"]`);
+            const patientName = patientElement ? patientElement.dataset.name : 'Bilinmiyor';
+
             try {
-                const docRef = doc(db, APPOINTMENTS_COLLECTION_PATH, appointmentId);
-                await deleteDoc(docRef);
-                showMessage("Randevu başarıyla silindi!");
+                await addDoc(appointmentCollectionRef(), {
+                    patientId,
+                    patientName, 
+                    doctorId: userId,
+                    doctorName: `${userProfile.name} ${userProfile.surname}`,
+                    datetime,
+                    notes,
+                    fee: 0, 
+                    procedure: '', 
+                    createdAt: serverTimestamp(),
+                    updatedAt: serverTimestamp(),
+                });
+
+                showNotification("Yeni randevu başarıyla oluşturuldu.", "success");
+                form.reset();
+                toggleNewAppointmentForm();
+
             } catch (error) {
-                console.error("Randevu silinirken hata oluştu: ", error);
-                showMessage(`Silme hatası: ${error.message}`, true);
+                console.error("Randevu oluşturma hatası:", error);
+                showNotification(`Randevu oluşturulurken hata: ${error.message}. Güvenlik kurallarını kontrol edin.`, "error");
             }
-        }
+        };
+        
+        // Randevu Silme İşlemi (Onay Modal'ı)
+        const handleDeleteClick = (e) => {
+            const appointmentId = e.currentTarget.dataset.id;
+            const app = appointments.find(a => a.id === appointmentId);
+            if (!app) return showNotification("Randevu bulunamadı.", "error");
 
-        // Expose deleteAppointment globally for button click (needed for non-React/Angular HTML)
-        window.deleteAppointment = deleteAppointment;
+            const patient = patients.find(p => p.uid === app.patientId);
+            const patientName = patient ? `${patient.name} ${patient.surname}` : 'Bilinmiyor';
+            const dateStr = app.datetime.toLocaleDateString('tr-TR');
 
-
-        function renderAppointments(appointments) {
-            appointmentsListEl.innerHTML = '';
-            appointmentCountEl.textContent = appointments.length;
-
-            if (appointments.length === 0) {
-                noAppointmentsEl.classList.remove('hidden');
-                return;
-            }
-            noAppointmentsEl.classList.add('hidden');
-
-            appointments.forEach(app => {
-                const appointmentDate = new Date(`${app.date}T${app.time}`);
-                const formattedDate = appointmentDate.toLocaleDateString('tr-TR', { year: 'numeric', month: 'short', day: 'numeric' });
-                const formattedTime = appointmentDate.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', hour12: false });
-                
-                const isOwner = app.createdBy === userId;
-
-                const item = document.createElement('div');
-                item.className = 'p-4 bg-indigo-50 rounded-xl border border-indigo-200';
-                item.innerHTML = `
-                    <div class="flex flex-col sm:flex-row sm:justify-between sm:items-start">
-                        <div class="min-w-0 flex-1">
-                            <p class="text-lg font-semibold text-gray-800">${app.description}</p>
-                            <p class="text-xs text-gray-500 mt-1 truncate">
-                                Oluşturan: 
-                                <span class="font-mono text-gray-800 ${isOwner ? 'font-bold text-primary' : ''}">${app.createdBy}</span>
-                                ${isOwner ? '<span class="text-xs text-primary">(Siz)</span>' : ''}
-                            </p>
-                        </div>
-                        <div class="mt-3 sm:mt-0 sm:ml-4 flex items-center flex-shrink-0">
-                            <div class="text-right mr-3">
-                                <span class="block bg-primary text-white text-xs font-bold px-3 py-1 rounded-full">${formattedDate}</span>
-                                <span class="block bg-accent text-white text-xs font-bold px-3 py-1 rounded-full mt-1">${formattedTime}</span>
-                            </div>
-                            ${isOwner ? `
-                                <button onclick="deleteAppointment('${app.id}')"
-                                    class="p-2 bg-red-500 text-white rounded-full hover:bg-red-600 transition duration-200"
-                                    title="Randevuyu Sil">
-                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                                </button>
-                            ` : ''}
+            const modalHtml = `
+                <div id="delete-modal" class="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 p-4">
+                    <div class="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full">
+                        <h4 class="text-xl font-bold text-red-600 mb-4 flex items-center">
+                            <i class="fas fa-exclamation-triangle mr-2"></i> Randevu Silme Onayı
+                        </h4>
+                        <p class="text-gray-700 mb-6">
+                            <span class="font-semibold">${patientName}</span> için ${dateStr} tarihli randevuyu silmek istediğinizden emin misiniz?
+                        </p>
+                        <div class="flex justify-end space-x-3">
+                            <button id="modal-cancel" class="px-4 py-2 bg-gray-300 hover:bg-gray-400 text-gray-800 font-medium rounded-lg transition-colors">
+                                İptal
+                            </button>
+                            <button id="modal-confirm-delete" data-id="${appointmentId}" class="px-4 py-2 bg-red-500 hover:bg-red-600 text-white font-medium rounded-lg transition-colors">
+                                <i class="fas fa-trash-alt mr-1"></i> Silmeyi Onayla
+                            </button>
                         </div>
                     </div>
-                `;
-                appointmentsListEl.appendChild(item);
-            });
-        }
-
-        // 4. Form Submission Logic
-        formEl.addEventListener('submit', async (e) => {
-            e.preventDefault();
+                </div>
+            `;
+            document.getElementById('modal-container').innerHTML = modalHtml;
             
-            if (!userId) {
-                showMessage("Doğrulama tamamlanmadı. Lütfen bekleyin.", true);
-                return;
-            }
+            document.getElementById('modal-cancel').addEventListener('click', () => document.getElementById('modal-container').innerHTML = '');
+            document.getElementById('modal-confirm-delete').addEventListener('click', async (e) => {
+                document.getElementById('modal-container').innerHTML = '';
+                await deleteAppointment(e.currentTarget.dataset.id);
+            });
+        };
 
-            const date = document.getElementById('date-input').value;
-            const time = document.getElementById('time-input').value;
-            const description = document.getElementById('description-input').value.trim();
-
-            if (!date || !time || !description) {
-                showMessage("Lütfen tüm alanları doldurun.", true);
-                return;
-            }
-
-            scheduleButton.disabled = true;
-            scheduleButton.textContent = 'Oluşturuluyor...';
-
+        const deleteAppointment = async (id) => {
             try {
-                const appointmentsRef = collection(db, APPOINTMENTS_COLLECTION_PATH);
-
-                const newAppointment = {
-                    date: date,
-                    time: time,
-                    description: description,
-                    createdBy: userId,
-                    createdAt: serverTimestamp(), // Use Firestore timestamp
-                };
-
-                await addDoc(appointmentsRef, newAppointment);
-                
-                showMessage("Randevu başarıyla oluşturuldu!");
-                formEl.reset();
-
+                const docRef = doc(db, getCollectionPath('appointments'), id);
+                await deleteDoc(docRef);
+                showNotification("Randevu başarıyla silindi.", "success");
             } catch (error) {
-                console.error("Randevu eklenirken hata: ", error);
-                showMessage(`Randevu oluşturma hatası: ${error.message}`, true);
-            } finally {
-                scheduleButton.disabled = false;
-                scheduleButton.textContent = 'Randevu Oluştur';
+                console.error("Randevu silme hatası:", error);
+                showNotification(`Randevu silinirken hata: ${error.message}. Randevunun sahibi siz misiniz?`, "error");
             }
-        });
+        };
+
+        // Randevu Detaylarını Güncelleme İşlemi
+        const handleEditClick = (e) => {
+            const appointmentId = e.currentTarget.dataset.id;
+            const app = appointments.find(a => a.id === appointmentId);
+            if (!app) return showNotification("Randevu bulunamadı.", "error");
+
+            const patient = patients.find(p => p.uid === app.patientId);
+            const patientName = patient ? `${patient.name} ${patient.surname}` : 'Bilinmiyor';
+            const dateStr = app.datetime.toLocaleDateString('tr-TR');
+
+            const modalHtml = `
+                <div id="edit-modal" class="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 p-4">
+                    <div class="bg-white rounded-xl shadow-2xl p-6 max-w-lg w-full">
+                        <h4 class="text-xl font-bold text-blue-600 mb-4 flex items-center">
+                            <i class="fas fa-file-invoice-dollar mr-2"></i> Randevu Detaylarını Düzenle
+                        </h4>
+                        <p class="text-gray-700 mb-4 font-semibold">${patientName} | ${dateStr}</p>
+                        
+                        <form id="edit-appointment-form">
+                            <div class="mb-4">
+                                <label for="edit-procedure" class="block text-sm font-medium text-gray-700 mb-1">Yapılan İşlem (Gerekli)</label>
+                                <textarea id="edit-procedure" rows="3" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" placeholder="Örn: Diş temizliği ve 2 numara dolgu...">${app.procedure || ''}</textarea>
+                            </div>
+                            <div class="mb-6">
+                                <label for="edit-fee" class="block text-sm font-medium text-gray-700 mb-1">Ücret (TL - Sayı Olarak)</label>
+                                <input type="number" id="edit-fee" required min="0" value="${app.fee || 0}" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                            <div class="flex justify-end space-x-3">
+                                <button type="button" id="edit-cancel" class="px-4 py-2 bg-gray-300 hover:bg-gray-400 text-gray-800 font-medium rounded-lg transition-colors">
+                                    İptal
+                                </button>
+                                <button type="submit" id="edit-confirm-btn" class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-lg transition-colors">
+                                    <i class="fas fa-save mr-1"></i> Kaydet
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            `;
+            document.getElementById('modal-container').innerHTML = modalHtml;
+            
+            document.getElementById('edit-cancel').addEventListener('click', () => document.getElementById('modal-container').innerHTML = '');
+            document.getElementById('edit-appointment-form').addEventListener('submit', async (formEvent) => {
+                formEvent.preventDefault();
+                const procedure = document.getElementById('edit-procedure').value.trim();
+                const fee = parseFloat(document.getElementById('edit-fee').value);
+                
+                if (isNaN(fee) || fee < 0) {
+                     showNotification("Lütfen geçerli bir ücret girin.", "error");
+                     return;
+                }
+                if (!procedure) {
+                     showNotification("Lütfen yapılan işlemi girin.", "error");
+                     return;
+                }
+
+                try {
+                    const docRef = doc(db, getCollectionPath('appointments'), appointmentId);
+                    await updateDoc(docRef, {
+                        procedure: procedure,
+                        fee: fee,
+                        updatedAt: serverTimestamp(),
+                    });
+                    document.getElementById('modal-container').innerHTML = '';
+                    showNotification("Randevu detayları başarıyla güncellendi.", "success");
+                } catch (error) {
+                    console.error("Randevu güncelleme hatası:", error);
+                    showNotification(`Güncelleme hatası: ${error.message}. Sadece kendi randevularınızı güncelleyebilirsiniz.`, "error");
+                }
+            });
+        };
+
+
+        // Uygulamayı başlat
+        initializeFirebase();
 
     </script>
 </body>
