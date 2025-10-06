@@ -115,7 +115,32 @@
 
         // 1. Firebase Environment Setup
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+
+        // Kullanıcının sağladığı yapılandırma (Eğer ortam değişkenleri çalışmazsa fallback olarak kullanılır)
+        const hardcodedFirebaseConfig = {
+            apiKey: "AIzaSyANE4jBU19fbVruV5NrtgPUvlfU4QCC0CA",
+            authDomain: "randevutakip-7db24.firebaseapp.com",
+            projectId: "randevutakip-7db24",
+            storageBucket: "randevutakip-7db24.firebasestorage.app",
+            messagingSenderId: "738418873977",
+            appId: "1:738418873977:web:d0a5b8dbfe74777949e6a8",
+            measurementId: "G-2LEEET92VJ"
+        };
+        
+        // Ortam değişkenini kullanmayı dene, başarısız olursa kullanıcı yapılandırmasını kullan
+        let firebaseConfig = hardcodedFirebaseConfig;
+        try {
+            const envConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : 'null');
+            // Eğer ortamdan gelen config geçerli bir projectId içeriyorsa onu kullan
+            if (envConfig && envConfig.projectId) {
+                firebaseConfig = envConfig;
+            } else {
+                console.warn("Ortam Firebase yapılandırması boş veya geçersiz. Kullanıcının sağladığı yapılandırma kullanılıyor.");
+            }
+        } catch (e) {
+            console.warn("Ortam Firebase yapılandırması ayrıştırılamadı. Kullanıcının sağladığı yapılandırma kullanılıyor.");
+        }
+
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
         let db, auth;
@@ -240,7 +265,7 @@
                 return;
             }
 
-            // Custom non-alert confirmation
+            // Custom non-alert confirmation (using window.confirm as a fallback for simple confirmation UI)
             if (!window.confirm("Bu randevuyu silmek istediğinizden emin misiniz?")) {
                 return;
             }
