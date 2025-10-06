@@ -24,9 +24,12 @@
 </head>
 <body>
 
-    <div id="app-container" class="min-h-screen p-4 sm:p-8 bg-gray-50">
+    <div id="app-container" class="min-h-screen p-4 sm:p-8 bg-gray-50 relative">
         <div class="text-center p-10 text-xl text-primary font-semibold">Uygulama yükleniyor...</div>
     </div>
+    
+    <!-- Özel Onay Modalı Buraya Eklenecek -->
+    <div id="modal-portal"></div>
 
     <!-- Firebase SDK'ları -->
     <script type="module">
@@ -91,6 +94,38 @@
             `;
             setTimeout(() => { container.innerHTML = ''; }, 5000);
         };
+        
+        // Özel Onay Modalı (window.confirm yerine)
+        const renderConfirmationModal = (message, onConfirm) => {
+            const modalPortal = document.getElementById('modal-portal');
+            if (!modalPortal) return;
+
+            modalPortal.innerHTML = `
+                <div id="custom-modal-backdrop" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50 p-4 transition-opacity duration-300">
+                    <div class="bg-white p-6 rounded-xl shadow-2xl max-w-sm w-full">
+                        <p class="text-lg font-semibold text-gray-800 mb-4">${message}</p>
+                        <div class="flex justify-end space-x-3">
+                            <button id="modal-cancel-btn" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition">
+                                Hayır, Vazgeç
+                            </button>
+                            <button id="modal-confirm-btn" class="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition">
+                                Evet, İptal Et
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            const closeModal = () => {
+                modalPortal.innerHTML = '';
+            };
+
+            document.getElementById('modal-cancel-btn').addEventListener('click', closeModal);
+            document.getElementById('modal-confirm-btn').addEventListener('click', () => {
+                onConfirm();
+                closeModal();
+            });
+        };
 
         const formatDate = (dateString) => {
             if (!dateString) return 'Tarih Belirtilmemiş';
@@ -113,38 +148,40 @@
         // --- FIREBASE İLK BAŞLATMA VE YETKİLENDİRME ---
 
         const initFirebase = async () => {
-            if (!firebaseConfig.projectId) {
-                document.getElementById('app-container').innerHTML = '<div class="text-center p-10 text-red-500">Firebase konfigürasyonu eksik.</div>';
-                return;
-            }
-            
-            app = initializeApp(firebaseConfig);
-            db = getFirestore(app);
-            auth = getAuth(app);
-            
-            appointmentsColRef = collection(db, getCollectionPath('appointments'));
-            patientsColRef = collection(db, getCollectionPath('patients'));
+            try {
+                // Firebase konfigürasyon kontrolü kaldırıldı (Konfigürasyonun Canvas tarafından sağlandığı varsayılır)
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                
+                appointmentsColRef = collection(db, getCollectionPath('appointments'));
+                patientsColRef = collection(db, getCollectionPath('patients'));
 
-            onAuthStateChanged(auth, async (user) => {
-                if (user) {
-                    userId = user.uid;
-                    // Eğer anonim kullanıcıysa, paneli göster
-                    renderPatientPanel();
-                    startPatientDataListeners();
-                } else {
-                    userId = null;
-                    if (initialAuthToken) {
-                        try {
-                            await signInWithCustomToken(auth, initialAuthToken);
-                        } catch (error) {
-                             console.error("Token ile Auth hatası, role seçim ekranına yönlendiriliyor:", error);
-                             renderRoleSelection();
-                        }
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        renderPatientPanel();
+                        startPatientDataListeners();
                     } else {
-                        renderRoleSelection();
+                        userId = null;
+                        if (initialAuthToken) {
+                            try {
+                                await signInWithCustomToken(auth, initialAuthToken);
+                            } catch (error) {
+                                console.error("Token ile Auth hatası, role seçim ekranına yönlendiriliyor:", error);
+                                // Eğer custom token başarısız olursa, role seçim ekranına yönlendir.
+                                renderRoleSelection();
+                            }
+                        } else {
+                            // Custom token yoksa, direkt role seçim ekranına yönlendir, kullanıcı anonim olarak giriş yapmalı.
+                            renderRoleSelection();
+                        }
                     }
-                }
-            });
+                });
+            } catch (error) {
+                console.error("Firebase başlatma hatası:", error);
+                document.getElementById('app-container').innerHTML = '<div class="text-center p-10 text-red-500">Uygulama başlatılamadı. Konfigürasyon hatası veya Canvas ortamı eksik.</div>';
+            }
         };
 
         // --- ROL SEÇİM EKRANI (SADECE HASTA GİRİŞİ ODAGINDA) ---
@@ -326,6 +363,11 @@
                     </option>
                 `;
             }).join('');
+            
+            // İlk müsait slotu seç
+            if (timeSelect.querySelector('option:not([disabled])')) {
+                timeSelect.querySelector('option:not([disabled])').selected = true;
+            }
         };
         
         const handleBooking = async (e) => {
@@ -394,10 +436,10 @@
 
             const html = allAppointments.map(app => {
                 const statusColor = app.status === 'confirmed' ? 'bg-green-100 border-green-500' : 
-                                    app.status === 'pending' ? 'bg-yellow-100 border-yellow-500' : 
-                                    'bg-red-100 border-red-500';
+                                     app.status === 'pending' ? 'bg-yellow-100 border-yellow-500' : 
+                                     'bg-red-100 border-red-500';
                 const statusTextClass = app.status === 'confirmed' ? 'text-green-800' : 
-                                        app.status === 'pending' ? 'text-yellow-800' : 'text-red-800';
+                                          app.status === 'pending' ? 'text-yellow-800' : 'text-red-800';
 
                 return `
                     <div class="p-4 border rounded-xl shadow-md ${statusColor} border-l-4">
@@ -429,15 +471,17 @@
         const handleCancelAppointment = async (e) => {
             const id = e.currentTarget.dataset.id;
             
-            if (!window.confirm("Bu randevuyu iptal etmek istediğinizden emin misiniz?")) return; 
-            try {
-                const docRef = doc(appointmentsColRef, id);
-                await setDoc(docRef, { status: 'cancelled' }, { merge: true });
-                showMessage("Randevunuz başarıyla iptal edildi.", 'success');
-            } catch (error) {
-                console.error("İptal hatası:", error);
-                showMessage("Randevu iptal edilirken bir hata oluştu: " + error.message, 'error');
-            }
+            // window.confirm yerine özel modal kullanılıyor.
+            renderConfirmationModal("Bu randevuyu iptal etmek istediğinizden emin misiniz? Bu işlem geri alınamaz.", async () => {
+                try {
+                    const docRef = doc(appointmentsColRef, id);
+                    await setDoc(docRef, { status: 'cancelled' }, { merge: true });
+                    showMessage("Randevunuz başarıyla iptal edildi.", 'success');
+                } catch (error) {
+                    console.error("İptal hatası:", error);
+                    showMessage("Randevu iptal edilirken bir hata oluştu: " + error.message, 'error');
+                }
+            });
         };
 
         // Uygulamayı başlat
