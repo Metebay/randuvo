@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RandevuTakip - Appointment Scheduler</title>
+    <title>RandevuTakip - Randevu Planlayıcı</title>
     <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -46,59 +46,59 @@
     <div id="app" class="max-w-4xl mx-auto">
         <header class="text-center mb-8">
             <h1 class="text-4xl font-extrabold text-primary mb-2">RandevuTakip 📅</h1>
-            <p class="text-lg text-gray-600">Real-Time Public Appointment Scheduler</p>
+            <p class="text-lg text-gray-600">Gerçek Zamanlı Herkese Açık Randevu Planlayıcı</p>
         </header>
 
-        <!-- User Info & Status -->
+        <!-- Kullanıcı Bilgisi ve Durumu -->
         <div id="status-card" class="bg-white card rounded-xl p-4 mb-8">
             <p class="text-sm font-medium text-gray-700">
-                Status: <span id="auth-status" class="font-semibold text-accent">Loading...</span>
+                Durum: <span id="auth-status" class="font-semibold text-accent">Yükleniyor...</span>
             </p>
             <div id="user-info-container" class="mt-2 hidden">
                 <p class="text-xs text-gray-500 break-all">
-                    User ID: <span id="user-id" class="font-mono text-gray-800"></span>
+                    Kullanıcı ID: <span id="user-id" class="font-mono text-gray-800"></span>
                 </p>
             </div>
         </div>
 
-        <!-- Scheduling Form Card -->
+        <!-- Randevu Oluşturma Formu Kartı -->
         <div class="bg-white card rounded-xl p-6 mb-10">
-            <h2 class="text-2xl font-bold text-gray-800 mb-4">Schedule a New Appointment</h2>
+            <h2 class="text-2xl font-bold text-gray-800 mb-4">Yeni Randevu Oluştur</h2>
             <form id="appointment-form" class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <input type="date" id="date-input" required
                     class="form-input border border-gray-300 p-3 w-full text-gray-700"
-                    placeholder="Date">
+                    placeholder="Tarih">
                 <input type="time" id="time-input" required
                     class="form-input border border-gray-300 p-3 w-full text-gray-700"
-                    placeholder="Time">
+                    placeholder="Saat">
                 <input type="text" id="description-input" required maxlength="100"
                     class="form-input border border-gray-300 p-3 w-full md:col-span-3 text-gray-700"
-                    placeholder="Short Description (e.g., Doctor Appointment)">
+                    placeholder="Kısa Açıklama (örn: Doktor Randevusu)">
                 <button type="submit" id="schedule-button" disabled
                     class="md:col-span-3 bg-primary text-white font-semibold py-3 px-6 rounded-lg hover:bg-indigo-600 transition duration-200 disabled:opacity-50">
-                    Schedule Appointment
+                    Randevu Oluştur
                 </button>
             </form>
             <div id="message-box" class="mt-4 p-3 rounded-lg text-sm hidden" role="alert"></div>
         </div>
 
-        <!-- Appointment List Card -->
+        <!-- Randevu Listesi Kartı -->
         <div class="bg-white card rounded-xl p-6">
             <h2 class="text-2xl font-bold text-gray-800 mb-4 flex justify-between items-center">
-                Upcoming Appointments (Public)
+                Yaklaşan Randevular (Herkese Açık)
                 <span id="appointment-count" class="text-sm font-medium text-primary bg-indigo-100 px-3 py-1 rounded-full">0</span>
             </h2>
             <div id="appointments-list" class="space-y-4">
-                <!-- Appointments will be rendered here -->
+                <!-- Randevular buraya yüklenecek -->
                 <div id="loading-appointments" class="text-center py-8 text-gray-500 hidden">
                     <svg class="animate-spin h-5 w-5 text-primary mx-auto mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    Loading appointments...
+                    Randevular yükleniyor...
                 </div>
                 <p id="no-appointments" class="text-center py-8 text-gray-500 hidden">
-                    No appointments scheduled yet. Be the first!
+                    Henüz randevu yok. İlk siz olun!
                 </p>
             </div>
         </div>
@@ -108,7 +108,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, serverTimestamp, setLogLevel, doc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // IMPORTANT: Use setLogLevel('Debug') for better debugging in the console
         setLogLevel('Debug');
@@ -155,7 +155,7 @@
         onAuthStateChanged(auth, async (user) => {
             if (user) {
                 userId = user.uid;
-                authStatusEl.textContent = 'Authenticated';
+                authStatusEl.textContent = 'Doğrulanmış';
                 authStatusEl.classList.remove('text-accent');
                 authStatusEl.classList.add('text-green-600');
                 userIdEl.textContent = userId;
@@ -169,7 +169,7 @@
             } else {
                 // If not authenticated, attempt custom token or anonymous sign-in
                 try {
-                    authStatusEl.textContent = 'Authenticating...';
+                    authStatusEl.textContent = 'Doğrulanıyor...';
                     if (initialAuthToken) {
                         await signInWithCustomToken(auth, initialAuthToken);
                         console.log("Signed in with custom token.");
@@ -178,11 +178,11 @@
                         console.log("Signed in anonymously.");
                     }
                 } catch (error) {
-                    authStatusEl.textContent = 'Authentication Failed';
+                    authStatusEl.textContent = 'Doğrulama Başarısız';
                     authStatusEl.classList.remove('text-accent');
                     authStatusEl.classList.add('text-red-600');
                     console.error("Authentication Error:", error);
-                    showMessage("Failed to authenticate. Check console for details.", true);
+                    showMessage("Doğrulama başarısız oldu. Ayrıntılar için konsolu kontrol edin.", true);
                     isAuthReady = true; // Still mark as ready to prevent infinite loading
                 }
             }
@@ -211,8 +211,17 @@
 
                 // Sort appointments by date and time client-side
                 appointments.sort((a, b) => {
-                    const dateTimeA = new Date(`${a.date}T${a.time}`);
-                    const dateTimeB = new Date(`${b.date}T${b.time}`);
+                    // Check for invalid or null dates/times before comparison
+                    const dateTimeAString = `${a.date || '0001-01-01'}T${a.time || '00:00'}`;
+                    const dateTimeBString = `${b.date || '0001-01-01'}T${b.time || '00:00'}`;
+                    
+                    const dateTimeA = new Date(dateTimeAString);
+                    const dateTimeB = new Date(dateTimeBString);
+
+                    // Handle invalid dates by pushing them to the end
+                    if (isNaN(dateTimeA.getTime())) return 1;
+                    if (isNaN(dateTimeB.getTime())) return -1;
+
                     return dateTimeA - dateTimeB;
                 });
 
@@ -220,9 +229,35 @@
             }, (error) => {
                 loadingAppointmentsEl.classList.add('hidden');
                 console.error("Error fetching appointments:", error);
-                showMessage("Could not load appointments. Check connectivity.", true);
+                showMessage("Randevular yüklenemedi. Bağlantıyı kontrol edin.", true);
             });
         }
+        
+        // 5. Deletion Logic
+        async function deleteAppointment(appointmentId) {
+            if (!userId) {
+                showMessage("Randevu silmek için oturum açmış olmanız gerekir.", true);
+                return;
+            }
+
+            // Custom non-alert confirmation
+            if (!window.confirm("Bu randevuyu silmek istediğinizden emin misiniz?")) {
+                return;
+            }
+            
+            try {
+                const docRef = doc(db, APPOINTMENTS_COLLECTION_PATH, appointmentId);
+                await deleteDoc(docRef);
+                showMessage("Randevu başarıyla silindi!");
+            } catch (error) {
+                console.error("Randevu silinirken hata oluştu: ", error);
+                showMessage(`Silme hatası: ${error.message}`, true);
+            }
+        }
+
+        // Expose deleteAppointment globally for button click (needed for non-React/Angular HTML)
+        window.deleteAppointment = deleteAppointment;
+
 
         function renderAppointments(appointments) {
             appointmentsListEl.innerHTML = '';
@@ -236,20 +271,35 @@
 
             appointments.forEach(app => {
                 const appointmentDate = new Date(`${app.date}T${app.time}`);
-                const formattedDate = appointmentDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-                const formattedTime = appointmentDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+                const formattedDate = appointmentDate.toLocaleDateString('tr-TR', { year: 'numeric', month: 'short', day: 'numeric' });
+                const formattedTime = appointmentDate.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', hour12: false });
+                
+                const isOwner = app.createdBy === userId;
 
                 const item = document.createElement('div');
                 item.className = 'p-4 bg-indigo-50 rounded-xl border border-indigo-200';
                 item.innerHTML = `
                     <div class="flex flex-col sm:flex-row sm:justify-between sm:items-start">
-                        <div>
+                        <div class="min-w-0 flex-1">
                             <p class="text-lg font-semibold text-gray-800">${app.description}</p>
-                            <p class="text-sm text-gray-500 mt-1">Scheduled by: <span class="font-mono text-xs">${app.createdBy.substring(0, 15)}...</span></p>
+                            <p class="text-xs text-gray-500 mt-1 truncate">
+                                Oluşturan: 
+                                <span class="font-mono text-gray-800 ${isOwner ? 'font-bold text-primary' : ''}">${app.createdBy}</span>
+                                ${isOwner ? '<span class="text-xs text-primary">(Siz)</span>' : ''}
+                            </p>
                         </div>
-                        <div class="mt-2 sm:mt-0 text-right">
-                            <span class="inline-block bg-primary text-white text-xs font-bold px-3 py-1 rounded-full">${formattedDate}</span>
-                            <span class="inline-block bg-accent text-white text-xs font-bold px-3 py-1 rounded-full ml-2">${formattedTime}</span>
+                        <div class="mt-3 sm:mt-0 sm:ml-4 flex items-center flex-shrink-0">
+                            <div class="text-right mr-3">
+                                <span class="block bg-primary text-white text-xs font-bold px-3 py-1 rounded-full">${formattedDate}</span>
+                                <span class="block bg-accent text-white text-xs font-bold px-3 py-1 rounded-full mt-1">${formattedTime}</span>
+                            </div>
+                            ${isOwner ? `
+                                <button onclick="deleteAppointment('${app.id}')"
+                                    class="p-2 bg-red-500 text-white rounded-full hover:bg-red-600 transition duration-200"
+                                    title="Randevuyu Sil">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                </button>
+                            ` : ''}
                         </div>
                     </div>
                 `;
@@ -262,7 +312,7 @@
             e.preventDefault();
             
             if (!userId) {
-                showMessage("Authentication not complete. Please wait.", true);
+                showMessage("Doğrulama tamamlanmadı. Lütfen bekleyin.", true);
                 return;
             }
 
@@ -271,12 +321,12 @@
             const description = document.getElementById('description-input').value.trim();
 
             if (!date || !time || !description) {
-                showMessage("Please fill in all fields.", true);
+                showMessage("Lütfen tüm alanları doldurun.", true);
                 return;
             }
 
             scheduleButton.disabled = true;
-            scheduleButton.textContent = 'Scheduling...';
+            scheduleButton.textContent = 'Oluşturuluyor...';
 
             try {
                 const appointmentsRef = collection(db, APPOINTMENTS_COLLECTION_PATH);
@@ -291,15 +341,15 @@
 
                 await addDoc(appointmentsRef, newAppointment);
                 
-                showMessage("Appointment scheduled successfully!");
+                showMessage("Randevu başarıyla oluşturuldu!");
                 formEl.reset();
 
             } catch (error) {
-                console.error("Error adding document: ", error);
-                showMessage(`Error scheduling appointment: ${error.message}`, true);
+                console.error("Randevu eklenirken hata: ", error);
+                showMessage(`Randevu oluşturma hatası: ${error.message}`, true);
             } finally {
                 scheduleButton.disabled = false;
-                scheduleButton.textContent = 'Schedule Appointment';
+                scheduleButton.textContent = 'Randevu Oluştur';
             }
         });
 
