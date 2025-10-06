@@ -77,15 +77,18 @@
 
     <!-- Firebase SDK'ları -->
     <script type="module">
-        // ÖNEMLİ: SDK Versiyonu 11.6.1'e geri alındı ve tüm gerekli fonksiyonlar import edildi.
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { 
+            initializeApp 
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { 
             getAuth, 
             signInAnonymously, 
             signInWithCustomToken, 
             onAuthStateChanged,
             signInWithEmailAndPassword,
-            signOut
+            signOut,
+            // Yeni eklenen import
+            createUserWithEmailAndPassword 
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { 
             getFirestore, 
@@ -397,28 +400,44 @@
             appElement.innerHTML += html;
         };
         
+        // GÜNCELLENDİ: Hasta Kayıt Formu (E-posta/Şifre Tabanlı)
         const renderPatientRegister = (appElement) => {
             const html = `
                 <main class="flex-grow flex items-center justify-center bg-gray-50 p-4">
                     <div class="max-w-md w-full p-8 bg-white rounded-2xl shadow-2xl">
-                        <h2 class="text-3xl font-bold text-gray-900 mb-6 text-center">Hasta Kayıt (Telefon Tabanlı)</h2>
+                        <h2 class="text-3xl font-bold text-gray-900 mb-6 text-center">Hasta Kayıt (E-posta/Şifre)</h2>
                         <div id="notification-container"></div>
-                        <p class="text-sm text-red-500 mb-4 text-center font-medium">
-                            *Sistem kısıtlı bir ortamda çalıştığı için, kayıt sırasında sorun yaşarsanız lütfen doğrudan "Doktor Girişi" seçeneğini kullanın.
-                        </p>
+                        
                         <form id="patient-register-form">
-                            <div class="mb-4">
-                                <label for="reg-name" class="block text-sm font-medium text-gray-700 mb-1">Adınız</label>
-                                <input type="text" id="reg-name" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
+                            <!-- Ad ve Soyad -->
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                                <div>
+                                    <label for="reg-name" class="block text-sm font-medium text-gray-700 mb-1">Adınız</label>
+                                    <input type="text" id="reg-name" required
+                                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
+                                </div>
+                                <div>
+                                    <label for="reg-surname" class="block text-sm font-medium text-gray-700 mb-1">Soyadınız</label>
+                                    <input type="text" id="reg-surname" required
+                                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
+                                </div>
                             </div>
+
+                            <!-- E-posta -->
                             <div class="mb-4">
-                                <label for="reg-surname" class="block text-sm font-medium text-gray-700 mb-1">Soyadınız</label>
-                                <input type="text" id="reg-surname" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
+                                <label for="reg-email" class="block text-sm font-medium text-gray-700 mb-1">E-posta Adresi</label>
+                                <input type="email" id="reg-email" required
+                                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
                             </div>
+
+                            <!-- Şifre -->
                             <div class="mb-6">
-                                <label for="reg-phone" class="block text-sm font-medium text-gray-700 mb-1">Telefon Numarası (Örn: 5551234567)</label>
-                                <input type="tel" id="reg-phone" required pattern="[0-9]{10,15}" title="Lütfen geçerli bir telefon numarası girin." class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
+                                <label for="reg-password" class="block text-sm font-medium text-gray-700 mb-1">Şifre</label>
+                                <input type="password" id="reg-password" required minlength="6"
+                                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
+                                <p class="text-xs text-gray-400 mt-1">En az 6 karakter olmalıdır.</p>
                             </div>
+                            
                             <button type="submit" id="reg-submit-btn" class="w-full py-3 bg-primary hover:bg-emerald-600 text-white font-bold rounded-xl shadow-lg transition-colors duration-200 flex items-center justify-center">
                                 <span id="reg-btn-text"><i class="fas fa-user-plus mr-2"></i> Kayıt Ol</span>
                                 <div id="reg-spinner" class="spinner hidden"></div>
@@ -516,7 +535,7 @@
         
         const renderNewAppointmentForm = () => {
              const patientOptions = patients.map(p => 
-                `<option value="${p.uid}" data-name="${p.name} ${p.surname}">${p.name} ${p.surname} (Tel: ${p.phone})</option>`
+                `<option value="${p.uid}" data-name="${p.name} ${p.surname}">${p.name} ${p.surname} (E-posta: ${p.email})</option>`
             ).join('');
 
             const today = new Date().toISOString().slice(0, 10);
@@ -656,7 +675,7 @@
                             </h3>
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-gray-700">
                                 <p><span class="font-semibold">Ad Soyad:</span> ${userProfile.name} ${userProfile.surname}</p>
-                                <p><span class="font-semibold">Telefon:</span> ${userProfile.phone}</p>
+                                <p><span class="font-semibold">E-posta:</span> ${userProfile.email}</p>
                             </div>
                         </div>
 
@@ -678,19 +697,21 @@
 
         // --- Olay İşleyicileri (Event Handlers) ve Firebase İşlemleri ---
 
+        // GÜNCELLENDİ: Hasta Kayıt İşlemi (E-posta/Şifre Tabanlı)
         const handlePatientRegistration = async (e) => {
             e.preventDefault();
             const form = e.target;
             const name = form.elements['reg-name'].value.trim();
             const surname = form.elements['reg-surname'].value.trim();
-            const phone = form.elements['reg-phone'].value.trim();
+            const email = form.elements['reg-email'].value.trim();
+            const password = form.elements['reg-password'].value;
             
             const btn = document.getElementById('reg-submit-btn');
             const btnText = document.getElementById('reg-btn-text');
             const spinner = document.getElementById('reg-spinner');
 
-            if (!name || !surname || !phone || !phone.match(/^[0-9]{10,15}$/)) {
-                showNotification("Lütfen tüm alanları doldurun ve geçerli bir telefon numarası girin.", "error");
+            if (!name || !surname || !email || !password || password.length < 6) {
+                showNotification("Lütfen tüm alanları doldurun ve geçerli, en az 6 karakterli bir şifre girin.", "error");
                 return;
             }
 
@@ -699,43 +720,40 @@
             btn.disabled = true;
 
             try {
-                // Anonim giriş ile bir UID almayı dene
-                let tempUser = auth.currentUser;
-                if (!tempUser || tempUser.isAnonymous) {
-                     try {
-                        const anonCred = await signInAnonymously(auth);
-                        tempUser = anonCred.user;
-                     } catch(e) {
-                         // Eğer burası tekrar 'auth/admin-restricted-operation' hatası verirse, kullanıcıya bilgi ver.
-                         if (e.code === 'auth/admin-restricted-operation') {
-                             throw new Error("Sistem kısıtlı bir ortamda çalışıyor. Lütfen doğrudan bir doktor hesabıyla giriş yapmayı deneyin.");
-                         }
-                         throw e; // Diğer hataları ilet
-                     }
-                }
+                // 1. Firebase Authentication ile yeni kullanıcı oluştur
+                const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                const user = userCredential.user;
+                const userId = user.uid;
 
-                if (!tempUser) {
-                    throw new Error("Kayıt işlemi için oturum açılması gerekiyor.");
-                }
-                
-                const userDocRef = doc(db, getCollectionPath('users'), tempUser.uid);
+                // 2. Kullanıcı bilgilerini ve rolünü Firestore'a kaydet
+                const userDocRef = doc(db, getCollectionPath('users'), userId);
                 await setDoc(userDocRef, {
-                    name,
-                    surname,
-                    phone,
-                    role: 'patient',
+                    name: name,
+                    surname: surname,
+                    email: email, // E-posta'yı profile de kaydediyoruz
+                    role: 'patient', 
                     createdAt: serverTimestamp()
                 }, { merge: true }); 
 
-                showNotification("Kayıt başarılı! Hasta Paneline yönlendiriliyorsunuz.", "success");
-                // onAuthStateChanged tetiklenecek ve yeni kullanıcıyı işleyecek
-                // Ancak hızlı yönlendirme için manuel profil güncelleme yapıyoruz:
-                await fetchUserProfile(tempUser.uid); 
-                renderApp();
+                showNotification(`Kayıt başarılı! Hoş geldiniz ${name}. Artık giriş yapabilirsiniz.`, "success");
+                
+                // Kayıt başarılı olduktan sonra kullanıcı otomatik olarak oturum açar. 
+                // onAuthStateChanged tetiklenecek ve paneli render edecektir.
+                
+                // Formu temizle
+                form.reset();
 
             } catch (error) {
                 console.error("Hasta kayıt hatası:", error);
-                showNotification(`Kayıt olurken bir hata oluştu: ${error.message}`, "error");
+                let errorMessage = 'Kayıt olurken bir hata oluştu.';
+                if (error.code === 'auth/email-already-in-use') {
+                    errorMessage = 'Bu e-posta adresi zaten kullanımda.';
+                } else if (error.code === 'auth/weak-password') {
+                    errorMessage = 'Şifre en az 6 karakter olmalıdır.';
+                } else {
+                    errorMessage = `Kayıt olurken bir hata oluştu: ${error.message}`;
+                }
+                showNotification(errorMessage, "error");
             } finally {
                 btnText.classList.remove('hidden');
                 spinner.classList.add('hidden');
