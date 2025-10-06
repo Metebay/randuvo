@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Doktor Yönetim Paneli</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        primary: '#4f46e5', // İndigo (Doktor için)
+                        secondary: '#22c55e', // Yeşil (Onay için)
+                        accent: '#3b82f6' // Mavi
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body>
+
+    <div id="app-container" class="min-h-screen p-4 sm:p-8">
+        <div class="text-center p-10 text-xl text-primary font-semibold">Uygulama yükleniyor...</div>
+    </div>
+
+    <!-- Firebase SDK'ları -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { 
+            getAuth, 
+            signInWithCustomToken, 
+            onAuthStateChanged,
+            signOut,
+            signInWithEmailAndPassword
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { 
+            getFirestore, 
+            doc, 
+            setDoc, 
+            onSnapshot, 
+            collection, 
+            query, 
+            where, 
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        // --- SABİT TANIMLAMALAR ---
+        const DOCTOR_EMAIL = 'doctor@sistem.com'; 
+        const DOCTOR_PASSWORD = 'password123'; 
+        const DOCTOR_ID = 'doc1'; // Yönetilen doktorun ID'si
+        const DEFAULT_FEE = 350; 
+        
+        const DOCTORS = [
+            { id: 'doc1', name: 'Dr. Ahmet Yılmaz', specialty: 'Kardiyoloji' },
+            { id: 'doc2', name: 'Dr. Elif Kaya', specialty: 'Dermatoloji' },
+            { id: 'doc3', name: 'Dr. Can Demir', specialty: 'Dahiliye' },
+        ];
+
+        // --- GLOBAL DEĞİŞKENLER VE FIREBASE BAĞLANTISI ---
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        
+        let app, db, auth;
+        let userId = null;
+        let allAppointments = []; 
+        
+        const getCollectionPath = (collectionName) => {
+            // Ortak veritabanı yolu
+            return `/artifacts/${appId}/public/data/${collectionName}`;
+        };
+
+        let appointmentsColRef = null;
+
+        // --- YARDIMCI FONKSİYONLAR ---
+
+        const showMessage = (message, type = 'success') => {
+            const container = document.getElementById('message-container');
+            if (!container) return;
+            
+            const color = type === 'success' ? 'bg-green-100 border-green-400 text-green-700' : 'bg-red-100 border-red-400 text-red-700';
+            container.innerHTML = `
+                <div class="px-4 py-3 rounded relative border ${color} mb-4" role="alert">
+                    <span class="block sm:inline">${message}</span>
+                </div>
+            `;
+            setTimeout(() => { container.innerHTML = ''; }, 5000);
+        };
+
+        const formatDate = (dateString) => {
+            if (!dateString) return 'Tarih Belirtilmemiş';
+            try {
+                const options = { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' };
+                return new Date(dateString).toLocaleDateString('tr-TR', options);
+            } catch (e) {
+                return dateString;
+            }
+        };
+        
+        const handleLogout = () => {
+             signOut(auth).then(() => {
+                renderRoleSelection();
+            }).catch(error => {
+                console.error("Çıkış Hatası:", error);
+            });
+        };
+
+        // --- FIREBASE İLK BAŞLATMA VE YETKİLENDİRME ---
+
+        const initFirebase = async () => {
+            if (!firebaseConfig.projectId) {
+                document.getElementById('app-container').innerHTML = '<div class="text-center p-10 text-red-500">Firebase konfigürasyonu eksik.</div>';
+                return;
+            }
+            
+            app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
+            
+            appointmentsColRef = collection(db, getCollectionPath('appointments'));
+
+            onAuthStateChanged(auth, async (user) => {
+                if (user && user.email === DOCTOR_EMAIL) {
+                    userId = user.uid;
+                    renderDoctorPanel();
+                    startDoctorDataListener();
+                } else {
+                    userId = null;
+                    if (initialAuthToken) {
+                        try {
+                            await signInWithCustomToken(auth, initialAuthToken);
+                        } catch (error) {
+                             console.error("Token ile Auth hatası, role seçim ekranına yönlendiriliyor:", error);
+                             renderRoleSelection();
+                        }
+                    } else {
+                        renderRoleSelection();
+                    }
+                }
+            });
+        };
+
+        // --- DOKTOR GİRİŞ EKRANI ---
+
+        const renderRoleSelection = () => {
+            const appContainer = document.getElementById('app-container');
+            appContainer.innerHTML = `
+                <div class="min-h-screen flex items-center justify-center bg-gray-100 p-6">
+                    <div class="max-w-md w-full bg-white p-8 rounded-2xl shadow-2xl border-t-8 border-primary">
+                        <h2 class="text-3xl font-extrabold text-gray-800 mb-4 text-center">👩‍⚕️ Doktor Girişi</h2>
+                        <p class="text-gray-600 mb-6 text-center">
+                            Randevuları yönetmek, onaylamak ve hasta notlarını kaydetmek için giriş yapın.
+                        </p>
+                        <form id="doctor-login-form" class="space-y-4">
+                            <div id="doctor-message-container"></div>
+                            <input type="email" id="doctor-email" placeholder="E-posta" value="${DOCTOR_EMAIL}" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary"/>
+                            <input type="password" id="doctor-password" placeholder="Parola" value="${DOCTOR_PASSWORD}" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary"/>
+                            
+                            <button type="submit" id="doctor-submit-btn" class="w-full font-bold py-3 px-4 rounded-xl transition duration-300 shadow-lg bg-primary hover:bg-indigo-700 text-white">
+                                Giriş Yap
+                            </button>
+                        </form>
+                        <p class="mt-4 text-xs text-gray-500 text-center">
+                            **Test Hesabı: E-posta: \`${DOCTOR_EMAIL}\`, Parola: \`${DOCTOR_PASSWORD}\`**
+                        </p>
+                    </div>
+                </div>
+            `;
+            document.getElementById('doctor-login-form').addEventListener('submit', handleDoctorLogin);
+        };
+        
+        const handleDoctorLogin = async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('doctor-email').value;
+            const password = document.getElementById('doctor-password').value;
+            const messageContainer = document.getElementById('doctor-message-container');
+            const submitBtn = document.getElementById('doctor-submit-btn');
+
+            messageContainer.innerHTML = '';
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Giriş Yapılıyor...';
+
+            try {
+                if (email !== DOCTOR_EMAIL) {
+                    throw new Error("Sadece yetkili doktor hesabı ile giriş yapılabilir.");
+                }
+                
+                await signInWithEmailAndPassword(auth, email, password);
+                // Başarılı giriş sonrası onAuthStateChanged tetiklenir
+            } catch (err) {
+                console.error("Doktor Giriş Hatası:", err);
+                let errorMessage = 'Giriş başarısız. Lütfen bilgilerinizi kontrol edin.';
+                if (err.message.includes("Sadece yetkili doktor hesabı")) {
+                    errorMessage = "Sadece yetkili doktor hesabı ile giriş yapılabilir.";
+                } else if (err.code === 'auth/invalid-credential') {
+                     errorMessage = 'Geçersiz e-posta veya parola. (Firebase\'de kayıtlı olduğundan emin olun.)';
+                }
+                
+                messageContainer.innerHTML = `<div class="text-red-600 font-medium text-sm bg-red-100 p-2 rounded-lg">${errorMessage}</div>`;
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Giriş Yap';
+            }
+        };
+
+        // --- VERİ DİNLEYİCİLERİ ---
+
+        const startDoctorDataListener = () => {
+            if (!db) return;
+            
+            // Sadece bu doktora ait randevuları dinle
+            const q = query(
+                appointmentsColRef,
+                where('doctorId', '==', DOCTOR_ID) 
+            );
+
+            onSnapshot(q, (snapshot) => {
+                allAppointments = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data(),
+                })).sort((a, b) => new Date(`${a.date}T${a.time}`) - new Date(`${b.date}T${b.time}`));
+                
+                updateDoctorAppointmentList();
+            }, (err) => console.error("Doktor Randevu Dinleme Hatası:", err));
+        };
+
+        // --- DOKTOR PANELİ ARAYÜZÜ ---
+
+        const renderDoctorPanel = () => {
+            const appContainer = document.getElementById('app-container');
+            const currentDoctor = DOCTORS.find(d => d.id === DOCTOR_ID);
+            
+            appContainer.innerHTML = `
+                <div class="min-h-screen bg-gray-100 p-4 sm:p-8">
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 max-w-7xl mx-auto">
+                        <h1 class="text-4xl font-extrabold text-primary">👩‍⚕️ Doktor Yönetim Paneli</h1>
+                        <div class="mt-4 sm:mt-0 flex items-center space-x-4">
+                            <span class="text-lg font-semibold text-indigo-700 hidden sm:block">
+                                ${currentDoctor?.name} (${currentDoctor?.specialty})
+                            </span>
+                            <button id="logout-btn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300">
+                                Çıkış Yap
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div id="message-container" class="max-w-7xl mx-auto"></div>
+
+                    <div id="doctor-content-container" class="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <!-- 1. Randevu Listesi -->
+                        <div id="appointment-list-panel" class="lg:col-span-2 bg-white p-6 rounded-2xl shadow-xl h-full overflow-y-auto">
+                            <h2 class="text-2xl font-bold text-primary mb-4 border-b pb-2">📅 Aktif Randevular (Onay Bekleyen/Onaylı)</h2>
+                            <div id="doctor-appointment-list" class="space-y-3">
+                                <p class="text-center text-gray-500 py-4">Randevular yükleniyor...</p>
+                            </div>
+                        </div>
+
+                        <!-- 2. Hasta Detayları -->
+                        <div id="patient-details-panel" class="lg:col-span-1 bg-white p-6 rounded-2xl shadow-xl">
+                            <h2 class="text-2xl font-bold text-primary mb-4 border-b pb-2">Hasta Detayları ve Yönetim</h2>
+                            <div id="patient-details-content" class="text-gray-500 text-center py-10">
+                                Soldaki listeden bir randevu seçerek hasta bilgilerini ve notlarını yönetin.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('logout-btn').addEventListener('click', handleLogout);
+            updateDoctorAppointmentList();
+        };
+
+        const updateDoctorAppointmentList = () => {
+            const listContainer = document.getElementById('doctor-appointment-list');
+            if (!listContainer) return;
+
+            // Sadece beklemede ve onaylanmış randevuları göster
+            const filteredAppointments = allAppointments.filter(app => app.status !== 'cancelled');
+
+            if (filteredAppointments.length === 0) {
+                listContainer.innerHTML = '<p class="text-gray-500">Aktif veya bekleyen randevu bulunmamaktadır.</p>';
+                document.getElementById('patient-details-content').innerHTML = `
+                    <p class="text-gray-500 text-center py-10">
+                        Soldaki listeden bir randevu seçerek hasta bilgilerini ve notlarını yönetin.
+                    </p>
+                `;
+                return;
+            }
+
+            const html = filteredAppointments.map(app => {
+                const statusColor = app.status === 'confirmed' ? 'border-green-500' :
+                                    app.status === 'pending' ? 'border-yellow-500' : 'border-red-500';
+                const statusText = app.status === 'confirmed' ? 'ONAYLI' : app.status === 'pending' ? 'BEKLEYEN' : 'İPTAL';
+                
+                return `
+                    <div data-id="${app.id}" class="appointment-item p-4 rounded-xl cursor-pointer transition duration-150 border-l-4 hover:bg-gray-50 bg-white shadow-sm ${statusColor}">
+                        <div class="flex justify-between items-center">
+                            <p class="font-bold text-gray-900">${app.patientName}</p>
+                            <span class="px-2 py-1 text-xs font-bold rounded-full ${app.status === 'confirmed' ? 'bg-green-200 text-green-800' : app.status === 'pending' ? 'bg-yellow-200 text-yellow-800' : 'bg-red-200 text-red-800'}">
+                                ${statusText}
+                            </span>
+                        </div>
+                        <p class="text-sm text-gray-600 mt-1">
+                            ${formatDate(app.date)} @ <span class="font-bold">${app.time}</span>
+                        </p>
+                    </div>
+                `;
+            }).join('');
+
+            listContainer.innerHTML = html;
+
+            document.querySelectorAll('.appointment-item').forEach(item => {
+                item.addEventListener('click', (e) => {
+                    document.querySelectorAll('.appointment-item').forEach(i => i.classList.remove('ring-2', 'ring-offset-2', 'ring-primary'));
+                    e.currentTarget.classList.add('ring-2', 'ring-offset-2', 'ring-primary');
+
+                    const id = e.currentTarget.dataset.id;
+                    const appointment = allAppointments.find(app => app.id === id);
+                    if (appointment) {
+                        renderPatientDetails(appointment);
+                    }
+                });
+            });
+        };
+        
+        const renderPatientDetails = async (appointment) => {
+            const detailContainer = document.getElementById('patient-details-content');
+            if (!detailContainer) return;
+            
+            const statusColorClass = (status) => {
+                switch (status) {
+                    case 'confirmed': return 'text-green-600 bg-green-100 border-green-300';
+                    case 'pending': return 'text-yellow-600 bg-yellow-100 border-yellow-300';
+                    case 'cancelled': return 'text-red-600 bg-red-100 border-red-300';
+                    default: return 'text-gray-600 bg-gray-100 border-gray-300';
+                }
+            };
+            
+            detailContainer.innerHTML = `
+                <input type="hidden" id="selected-appointment-id" value="${appointment.id}">
+                <div class="space-y-6">
+                    <div class="border p-4 rounded-xl bg-primary/10 border-primary/50">
+                        <h3 class="text-xl font-bold mb-2">${appointment.patientName}</h3>
+                        <p class="text-sm">📞 Telefon: <a href="tel:${appointment.patientPhone}" class="text-blue-600 hover:underline">${appointment.patientPhone}</a></p>
+                        <p class="text-sm">🆔 Hasta UID: <span class="font-mono text-xs">${appointment.patientId.substring(0, 8)}...</span></p>
+                    </div>
+                    
+                    <div class="space-y-2 border p-3 rounded-xl ${statusColorClass(appointment.status)}">
+                        <p class="text-lg font-semibold">Randevu Tarihi/Saati:</p>
+                        <p class="text-2xl font-extrabold text-gray-800">${formatDate(appointment.date)} @ ${appointment.time}</p>
+                        <p class="font-medium">Mevcut Durum: 
+                            <span class="font-bold ml-2 px-2 py-1 rounded-full text-sm bg-white/50 border">
+                                ${appointment.status.toUpperCase()}
+                            </span>
+                        </p>
+                        
+                        ${appointment.status !== 'cancelled' ? `
+                            <div class="flex space-x-2 mt-4 pt-2 border-t border-dashed">
+                                <button data-status="confirmed" data-id="${appointment.id}" class="update-status-btn flex-1 bg-green-500 hover:bg-green-600 text-white font-semibold py-2 rounded-lg transition duration-150 ${appointment.status === 'confirmed' ? 'opacity-50 cursor-not-allowed' : ''}">
+                                    Randevuyu Onayla
+                                </button>
+                                <button data-status="cancelled" data-id="${appointment.id}" class="update-status-btn flex-1 bg-red-500 hover:bg-red-600 text-white font-semibold py-2 rounded-lg transition duration-150">
+                                    Randevuyu İptal Et
+                                </button>
+                            </div>
+                        ` : '<p class="text-red-600 pt-2 border-t border-dashed font-semibold">Bu randevu iptal edilmiştir.</p>'}
+                    </div>
+                    
+                    <div class="space-y-3 pt-4 border-t">
+                        <h4 class="text-lg font-semibold text-gray-700">İşlem Ücreti (TL)</h4>
+                        <input
+                            type="number"
+                            id="doctor-service-fee"
+                            value="${appointment.serviceFee || DEFAULT_FEE}"
+                            placeholder="Ücreti girin"
+                            class="w-full p-3 border rounded-lg focus:ring-primary"
+                            min="0"
+                        />
+                    </div>
+                    
+                    <div class="space-y-3 pt-2">
+                        <h4 class="text-lg font-semibold text-gray-700">Doktor Notları</h4>
+                        <textarea
+                            id="doctor-notes"
+                            rows="4"
+                            placeholder="Hastanın durumu, tanı ve sonraki adımlar için notlarınızı buraya yazın..."
+                            class="w-full p-3 border rounded-lg focus:ring-primary resize-none"
+                        >${appointment.notes || ''}</textarea>
+                        <button
+                            id="save-notes-btn"
+                            class="w-full bg-primary hover:bg-indigo-600 text-white font-semibold py-2 rounded-lg shadow-md transition duration-150"
+                        >
+                            Notları ve Ücreti Kaydet
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            document.querySelectorAll('.update-status-btn').forEach(btn => {
+                btn.addEventListener('click', handleUpdateStatus);
+            });
+            document.getElementById('save-notes-btn').addEventListener('click', handleSaveNotes);
+        };
+        
+        const handleUpdateStatus = async (e) => {
+            const id = e.currentTarget.dataset.id;
+            const newStatus = e.currentTarget.dataset.status;
+            
+            if (!window.confirm(`Randevuyu ${newStatus === 'confirmed' ? 'ONAYLAMAK' : 'İPTAL ETMEK'} istediğinizden emin misiniz?`)) return;
+
+            try {
+                const docRef = doc(appointmentsColRef, id);
+                await setDoc(docRef, { status: newStatus }, { merge: true });
+                showMessage(`Randevu durumu başarıyla "${newStatus.toUpperCase()}" olarak güncellendi.`, 'success');
+            } catch (error) {
+                console.error("Durum güncelleme hatası:", error);
+                showMessage("Durum güncellenirken bir hata oluştu: " + error.message, 'error');
+            }
+        };
+
+        const handleSaveNotes = async () => {
+            const id = document.getElementById('selected-appointment-id')?.value;
+            const notes = document.getElementById('doctor-notes')?.value;
+            const serviceFee = document.getElementById('doctor-service-fee')?.value;
+            const saveBtn = document.getElementById('save-notes-btn');
+            
+            if (!id) return;
+
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'Kaydediliyor...';
+            
+            try {
+                const docRef = doc(appointmentsColRef, id);
+                await setDoc(docRef, { 
+                    notes: notes,
+                    serviceFee: Number(serviceFee) 
+                }, { merge: true });
+                showMessage("Doktor notları ve ücret başarıyla kaydedildi.", 'success');
+            } catch (error) {
+                console.error("Not/Ücret kaydetme hatası:", error);
+                showMessage("Kaydetme sırasında bir hata oluştu: " + error.message, 'error');
+            } finally {
+                saveBtn.disabled = false;
+                saveBtn.textContent = 'Notları ve Ücreti Kaydet';
+            }
+        };
+
+        // Uygulamayı başlat
+        window.onload = initFirebase;
+
+    </script>
+</body>
+</html>
