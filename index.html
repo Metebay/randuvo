@@ -80,7 +80,7 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { 
             getAuth, 
-            signInAnonymously, 
+            signInAnonymously, // Bu artık nadiren kullanılacak
             signInWithCustomToken, 
             onAuthStateChanged,
             signInWithEmailAndPassword,
@@ -153,12 +153,19 @@
                 db = getFirestore(app);
                 auth = getAuth(app);
 
+                // Hata çözümü: Sadece özel token varsa oturum açmayı dene.
+                // Token yoksa, 'auth/admin-restricted-operation' hatasından kaçınmak için
+                // signInAnonymously çağrısını atlıyoruz. onAuthStateChanged, kullanıcının null olduğunu görecektir.
                 if (initialAuthToken) {
                     await signInWithCustomToken(auth, initialAuthToken);
+                    console.log("Özel kimlik doğrulama tokeni ile giriş yapıldı.");
                 } else {
-                    await signInAnonymously(auth);
+                    console.warn("Özel kimlik doğrulama tokeni (initialAuthToken) bulunamadı. Anonim giriş denemesi atlandı. Kullanıcı girişi gerekecek.");
+                    // Opsiyonel: Anonim giriş denemesini try/catch içine alarak hatayı yoksayabiliriz.
+                    // await signInAnonymously(auth); 
                 }
 
+                // Auth durumu değiştiğinde çalışır (giriş, çıkış, token kullanımı sonrası)
                 onAuthStateChanged(auth, async (user) => {
                     userId = user ? user.uid : null;
                     userRole = null;
@@ -167,8 +174,9 @@
                     if (userId) {
                         await fetchUserProfile(userId);
                     } else {
-                         // Çıkış yapıldığında anonim giriş yap
-                         await signInAnonymously(auth);
+                        // Hata çözümü: Çıkış yapıldığında tekrar signInAnonymously çağırmayı durdurduk.
+                        // Bu, 'auth/admin-restricted-operation' hatasını tekrar tetiklemeyi önler.
+                        console.log("Kullanıcı çıkış yaptı veya anonim kullanıcı yok. Giriş ekranına yönlendiriliyor.");
                     }
                     
                     document.getElementById('loading-screen').classList.add('hidden');
@@ -180,6 +188,7 @@
                     <div class="text-center p-6 bg-white rounded-xl shadow-lg">
                         <p class="text-red-600 font-bold">Uygulama Hatası</p>
                         <p class="text-gray-500 mt-2">Firebase'i başlatırken sorun oluştu: ${error.message}</p>
+                        <p class="text-xs text-gray-400 mt-2">Bu genellikle 'auth/admin-restricted-operation' hatasıdır. Giriş yapmayı deneyin.</p>
                     </div>
                 `;
             }
@@ -261,7 +270,7 @@
 
         let currentView = 'home';
 
-        const navigate = (view) => {
+        window.navigate = (view) => {
             currentView = view;
             renderApp();
         };
@@ -270,9 +279,14 @@
             const appElement = document.getElementById('app');
             appElement.innerHTML = '';
             
-            if (!userId) {
-                // Auth süreci henüz tamamlanmadıysa, beklemeye devam et.
-                return; 
+            if (!userId && userRole === null) {
+                // Auth süreci tamamlanana veya AuthStateChanged bir kullanıcı durumu (null veya authenticated) döndürene kadar bekle.
+                // Eğer userId null ise ve custom token yoksa, Home view'a geçmek için hazırız.
+                if (document.getElementById('loading-screen').classList.contains('hidden')) {
+                     // Loading ekranı kalktıysa devam et
+                } else {
+                    return;
+                }
             }
 
             // Başlık ve Navigasyon Barını Ekle
@@ -291,8 +305,12 @@
                     setupPatientAppointmentListener();
                 }
                 renderPatientPanel(appElement);
+            } else if (currentView === 'doctor-login') {
+                 renderDoctorLogin(appElement);
+            } else if (currentView === 'patient-register') {
+                 renderPatientRegister(appElement);
             } else {
-                // 'anonymous' veya bilinmeyen rol
+                // 'anonymous' veya bilinmeyen rol ise ana sayfayı göster
                 renderHome(appElement);
             }
         };
@@ -324,7 +342,7 @@
         };
 
         const renderHeader = () => {
-            const isLoggedIn = userRole !== 'anonymous' && userRole !== null;
+            const isLoggedIn = userRole !== 'anonymous' && userRole !== null && userId !== null;
             const roleText = userRole === 'doctor' ? 'Doktor' : (userRole === 'patient' ? 'Hasta' : '');
             
             let navItems = '';
@@ -396,6 +414,9 @@
                     <div class="max-w-md w-full p-8 bg-white rounded-2xl shadow-2xl">
                         <h2 class="text-3xl font-bold text-gray-900 mb-6 text-center">Hasta Kayıt (Telefon Tabanlı)</h2>
                         <div id="notification-container"></div>
+                        <p class="text-sm text-red-500 mb-4 text-center font-medium">
+                            *Anonim giriş kısıtlı olduğu için, kayıt olmanız yeni bir Auth hesabı oluşturacaktır.
+                        </p>
                         <form id="patient-register-form">
                             <div class="mb-4">
                                 <label for="reg-name" class="block text-sm font-medium text-gray-700 mb-1">Adınız</label>
@@ -431,7 +452,7 @@
                         <h2 class="text-3xl font-bold text-gray-900 mb-6 text-center">Doktor Girişi (E-posta/Şifre)</h2>
                         <div id="notification-container"></div>
                         <p class="text-sm text-gray-500 mb-6 text-center">
-                            *Bu hesaplar yönetici tarafından Firebase Auth'a eklenmiş olmalıdır.
+                            *Bu hesaplar yönetici tarafından Firebase Auth'a eklenmiş olmalıdır ve Firestore'da 'doctor' rolüne sahip olmalıdır.
                         </p>
                         <form id="doctor-login-form">
                             <div class="mb-4">
@@ -689,18 +710,47 @@
             btn.disabled = true;
 
             try {
-                // Not: Güvenlik kuralları, sadece Auth olmuş kullanıcının kendi UID'sine yazmasına izin verir.
-                const userDocRef = doc(db, getCollectionPath('users'), userId);
+                // Hata çözümü: Anonim giriş kısıtlıysa, kayıt sırasında geçici olarak anonim giriş yapıp sonra kullanıcının üzerine yazmak gerekir.
+                // Ancak "auth/admin-restricted-operation" hatası anonim girişi tamamen engellediği için, bu adımı es geçip
+                // kullanıcının e-posta/şifre ile giriş yapması gereken bir senaryo gibi davranabiliriz (Ama bu app'te telefon numarası kullanılıyor).
+
+                // Telefon numarasını benzersiz bir UID olarak kullanmak Firebase Auth'un dışındadır.
+                // Bu nedenle, önce anonim giriş yapıp bir UID almamız gerekiyor (ki bu da hata veriyor).
+                // Geçici Çözüm: Başarılı bir şekilde kimlik doğrulaması yapabilmek için, bu ortamda "Giriş Yap" düğmesi üzerinden gitmek en güvenlisidir.
+                // Ancak bu bir hasta kayıt formu olduğundan, burayı yine de Anonim giriş/yeni Auth kullanıcısı oluşturmaya zorlamalıyız.
+                
+                // Anonim Giriş ile bir UID almayı dene (tekrar hata verme riski var, ama Auth'suz belge yazamayız)
+                let tempUser = auth.currentUser;
+                if (!tempUser || tempUser.isAnonymous) {
+                     try {
+                        // Eğer token ile giriş yapılmadıysa ve anonim kullanıcı yoksa, zorunlu olarak bir kez denemek gerekiyor.
+                        const anonCred = await signInAnonymously(auth);
+                        tempUser = anonCred.user;
+                     } catch(e) {
+                         // Eğer burası tekrar 'auth/admin-restricted-operation' hatası verirse, kullanıcıyı kayıt edemeyiz.
+                         // Bu durumda kullanıcıyı uyar.
+                         if (e.code === 'auth/admin-restricted-operation') {
+                             throw new Error("Sistem kısıtlı bir ortamda çalışıyor. Lütfen doğrudan bir doktor hesabıyla giriş yapmayı deneyin.");
+                         }
+                         throw e; // Diğer hataları ilet
+                     }
+                }
+
+                if (!tempUser) {
+                    throw new Error("Kayıt işlemi için oturum açılması gerekiyor.");
+                }
+                
+                const userDocRef = doc(db, getCollectionPath('users'), tempUser.uid);
                 await setDoc(userDocRef, {
                     name,
                     surname,
                     phone,
                     role: 'patient',
                     createdAt: serverTimestamp()
-                }, { merge: true }); // Merge: Anonim auth'un üzerine yazmak için.
+                }, { merge: true }); 
 
                 showNotification("Kayıt başarılı! Hasta Paneline yönlendiriliyorsunuz.", "success");
-                await fetchUserProfile(userId); 
+                await fetchUserProfile(tempUser.uid); 
                 navigate('patient-panel');
 
             } catch (error) {
@@ -765,7 +815,7 @@
                 try {
                     await signOut(auth);
                     showNotification("Başarıyla çıkış yaptınız.", "success");
-                    // onAuthStateChanged tetiklenecek ve anonim giriş/ana sayfaya yönlendirecek
+                    // onAuthStateChanged tetiklenecek ve anonim kullanıcı olmadan ana sayfaya yönlendirecek
                 } catch (error) {
                     console.error("Çıkış hatası:", error);
                     showNotification("Çıkış yaparken bir sorun oluştu.", "error");
